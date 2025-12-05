@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "CCFOLIA 채팅 알람",
+  "version": "0.1",
+  "description": "탭이 비활성화되어 있을 때, 새 채팅 메시지를 알림음으로 알려줍니다.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["https://ccfolia.com/rooms/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://ccfolia.com/rooms/*"],
+      "js": ["content.js"],
+      "all_frames": true
+    }
+  ],
+  "icons": {
+    "48": "icon.png"
+  },
+  "web_accessible_resources": [
+  {
+    "resources": ["notify.mp3"],
+    "matches": ["<all_urls>"]
+  }
+]
+
+}
