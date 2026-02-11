@@ -10,15 +10,28 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "tabs", "downloads", "scripting"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "downloads",
+    "scripting"
+  ],
   "host_permissions": [
     "https://*.roll20.net/*",
-    "https://roll20.net/*"
+    "https://roll20.net/*",
+    "https://*.d20.io/*",
+    "https://d20.io/*",
+    "https://*.amazonaws.com/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://*.roll20.net/*", "https://roll20.net/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://*.roll20.net/*",
+        "https://roll20.net/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]

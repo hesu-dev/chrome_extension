@@ -11,6 +11,11 @@ const TEXT_HIDE_ATTR = "data-roll20-cleaner-text-hide";
 const PREV_DISPLAY_ATTR = "data-roll20-cleaner-prev-display";
 const INLINE_FETCH_TIMEOUT_MS = 10000;
 const avatarRedirectCache = new Map();
+const avatarDataUrlCache = new Map();
+
+function isRoll20AvatarUrl(url) {
+  return /\/users\/avatar\/[^/]+\/\d+/i.test(url || "");
+}
 
 const settings = {
   colorFilterEnabled: false,
@@ -325,37 +330,134 @@ function removeSheetTemplateAreaNewlines(root) {
   });
 }
 
-async function resolveAvatarUrl(url) {
+function buildLoadedImageUrlMap() {
+  const map = new Map();
+  const imgs = document.querySelectorAll("img[src]");
+  imgs.forEach((img) => {
+    const rawSrc = img.getAttribute("src") || "";
+    const absSrc = toAbsoluteUrl(rawSrc);
+    const current = img.currentSrc || img.src || "";
+    if (!absSrc || !current) return;
+    map.set(absSrc, current);
+  });
+  return map;
+}
+
+function isLikelyFinalAvatarUrl(url) {
+  if (!url) return false;
+  const lower = String(url).toLowerCase();
+  return lower.includes("files.d20.io/images/") || lower.includes("gravatar.com/avatar/");
+}
+
+async function resolveAvatarUrl(url, loadedImageUrlMap) {
   const absolute = toAbsoluteUrl(url);
   if (!absolute) return "";
-  if (!/\/users\/avatar\/\d+\/\d+/i.test(absolute)) return absolute;
+  const loaded = loadedImageUrlMap?.get(absolute);
+  if (loaded && !isRoll20AvatarUrl(loaded)) return loaded;
+  if (!isRoll20AvatarUrl(absolute)) return absolute;
   if (avatarRedirectCache.has(absolute)) return avatarRedirectCache.get(absolute);
 
   try {
-    // Manual redirect lets us read Location from same-origin redirect response.
-    const response = await fetch(absolute, {
-      method: "GET",
-      redirect: "manual",
-      credentials: "include",
-    });
-    const location = response.headers.get("location");
-    const resolved = location ? toAbsoluteUrl(location, absolute) : absolute;
-    avatarRedirectCache.set(absolute, resolved || absolute);
-    return resolved || absolute;
+    // Try image loading first. It often exposes currentSrc with redirected final URL.
+    const byImageFirst = await resolveAvatarUrlViaImage(absolute, 2500);
+    if (byImageFirst && !isRoll20AvatarUrl(byImageFirst)) {
+      avatarRedirectCache.set(absolute, byImageFirst);
+      return byImageFirst;
+    }
+
+    // Manual redirect can expose Location on same-origin redirect responses.
+    try {
+      const response = await fetch(absolute, {
+        method: "GET",
+        redirect: "manual",
+        credentials: "include",
+      });
+      const location = response.headers.get("location");
+      const resolved = location ? toAbsoluteUrl(location, absolute) : "";
+      if (resolved && !isRoll20AvatarUrl(resolved)) {
+        avatarRedirectCache.set(absolute, resolved);
+        return resolved;
+      }
+    } catch (error) {
+      // Continue to next strategy.
+    }
+
+    // Follow redirect and read response.url when possible.
+    try {
+      const response = await fetch(absolute, {
+        method: "GET",
+        redirect: "follow",
+        credentials: "include",
+      });
+      const resolved = response.url ? toAbsoluteUrl(response.url) : "";
+      if (resolved && !isRoll20AvatarUrl(resolved)) {
+        avatarRedirectCache.set(absolute, resolved);
+        return resolved;
+      }
+    } catch (error) {
+      // Continue to next strategy.
+    }
+
+    // Last try with a slightly longer image timeout.
+    const byImage = await resolveAvatarUrlViaImage(absolute, 4000);
+    if (byImage && !isRoll20AvatarUrl(byImage)) {
+      avatarRedirectCache.set(absolute, byImage);
+      return byImage;
+    }
   } catch (error) {
-    avatarRedirectCache.set(absolute, absolute);
-    return absolute;
+    // Fall through to fallback below.
   }
+
+  avatarRedirectCache.set(absolute, absolute);
+  return absolute;
+}
+
+function resolveAvatarUrlViaImage(absoluteUrl, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(value || "");
+    };
+    img.onload = () => finish(img.currentSrc || img.src || "");
+    img.onerror = () => finish("");
+    const timer = setTimeout(() => finish(""), timeoutMs);
+    img.src = absoluteUrl;
+  });
+}
+
+async function resolveAvatarDataUrl(url, loadedImageUrlMap) {
+  const absolute = toAbsoluteUrl(url);
+  if (!absolute) return "";
+  if (avatarDataUrlCache.has(absolute)) return avatarDataUrlCache.get(absolute);
+
+  // Keep avatar processing lightweight: prefer final redirected URL instead of data URL conversion.
+  const resolved = await resolveAvatarUrl(absolute, loadedImageUrlMap);
+  const fallback = resolved || absolute;
+  avatarDataUrlCache.set(absolute, fallback);
+  return fallback;
 }
 
 async function absolutizeResourceUrls(clone) {
+  const loadedImageUrlMap = buildLoadedImageUrlMap();
   const fixAttr = (selector, attr) => {
     const nodes = clone.querySelectorAll(selector);
     nodes.forEach((node) => {
       const raw = node.getAttribute(attr);
       if (!raw || raw.startsWith("data:") || raw.startsWith("blob:")) return;
       const absolute = toAbsoluteUrl(raw);
-      if (absolute) node.setAttribute(attr, absolute);
+      if (!absolute) return;
+      if (attr === "src" && node.tagName === "IMG") {
+        const loaded = loadedImageUrlMap.get(absolute);
+        if (loaded) {
+          node.setAttribute(attr, loaded);
+          return;
+        }
+      }
+      node.setAttribute(attr, absolute);
     });
   };
 
@@ -366,12 +468,24 @@ async function absolutizeResourceUrls(clone) {
 
   // Resolve Roll20 avatar redirect URLs to their final absolute URL (e.g., gravatar).
   const avatarImgs = Array.from(clone.querySelectorAll("img[src]"));
-  for (const img of avatarImgs) {
+  const avatarTargets = avatarImgs.filter((img) =>
+    isRoll20AvatarUrl(img.getAttribute("src") || "")
+  );
+  await mapLimit(avatarTargets, 8, async (img) => {
     const src = img.getAttribute("src") || "";
-    if (!/\/users\/avatar\/\d+\/\d+/i.test(src)) continue;
-    const finalUrl = await resolveAvatarUrl(src);
-    if (finalUrl) img.setAttribute("src", finalUrl);
-  }
+    const dataOrUrl = await resolveAvatarDataUrl(src, loadedImageUrlMap);
+    if (dataOrUrl) img.setAttribute("src", dataOrUrl);
+  });
+
+  // One more pass: if a Roll20 avatar URL remains, try resolving from image currentSrc directly.
+  await mapLimit(avatarTargets, 4, async (img) => {
+    const src = img.getAttribute("src") || "";
+    if (!isRoll20AvatarUrl(src)) return;
+    const byImage = await resolveAvatarUrlViaImage(src, 3000);
+    if (byImage && !isRoll20AvatarUrl(byImage)) {
+      img.setAttribute("src", byImage);
+    }
+  });
 }
 
 async function buildVisibleHtml() {
@@ -466,7 +580,7 @@ async function collectAvatarMappingsFromRoot(root) {
     if (!name || !imgEl) continue;
     const src = imgEl.getAttribute("src") || "";
     if (!name || !src) continue;
-    const resolvedSrc = await resolveAvatarUrl(src);
+    const resolvedSrc = await resolveAvatarUrl(src, buildLoadedImageUrlMap());
     const finalSrc = resolvedSrc || toAbsoluteUrl(src) || src;
 
     const pairKey = `${name}|||${finalSrc}`;
