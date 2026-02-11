@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Roll20 채팅 정리 도구",
+  "version": "0.1.0",
+  "description": "Roll20 채팅 숨김 및 HTML 다운로드 도구",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Roll20 채팅 정리 도구"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "tabs", "downloads", "scripting"],
+  "host_permissions": [
+    "https://*.roll20.net/*",
+    "https://roll20.net/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.roll20.net/*", "https://roll20.net/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

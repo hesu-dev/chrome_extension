@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Roll20 채팅 정리 도구</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+  <main class="app">
+    <header class="header">
+      <h1>다운로드용 클리너</h1>
+      <p>Roll20 사이트에서 이용하세요</p>
+    </header>
+    <section class="card">
+      <label class="field">
+        <span class="label">감출 사담의 스타일을 입력하세요.</span>
+        <input id="targetColor" class="text-input" type="text" placeholder="color=#aaaaaa" />
+      </label>
+      <label class="toggle">
+        <input id="colorFilterEnabled" type="checkbox" />
+        <span class="toggle-ui" aria-hidden="true"></span>
+        <span class="toggle-text">사담 감춤</span>
+      </label>
+      <label class="toggle">
+        <input id="hiddenTextEnabled" type="checkbox" />
+        <span class="toggle-ui" aria-hidden="true"></span>
+        <span class="toggle-text">히든 메세지 감춤</span>
+      </label>
+      <button id="downloadBundlePage" class="btn btn-secondary" type="button">
+        HTML 파일을 다운로드 합니다.
+      </button>
+      <button id="downloadTest2" class="btn btn-tertiary" type="button">
+        프로필 이미지 편집
+      </button>
+      <section id="avatarEditor" class="avatar-editor hidden">
+        <div class="avatar-editor-header">
+          <strong>이름/아바타 매핑</strong>
+          <small>새 이미지 링크를 넣으면 해당 이름의 아바타를 모두 변경합니다.</small>
+        </div>
+        <div id="avatarList" class="avatar-list"></div>
+        <button id="downloadAvatarMapped" class="btn btn-quaternary" type="button">
+          수정 프로필로 다운로드
+        </button>
+      </section>
+      <div id="progressWrap" class="progress-wrap hidden" aria-live="polite">
+        <div class="progress-track">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <small id="progressText" class="progress-text">로딩중...</small>
+      </div>
+      <small id="status" class="status">위 버튼을 클릭하면 로딩이 시작됩니다.</small>
+    </section>
+    <footer class="footer">
+      <small>상시 적용되는 사항이므로, 다운로드를 마치시면 OFF로 바꾸시길 권장합니다.</small>
+    </footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+
+</html>
