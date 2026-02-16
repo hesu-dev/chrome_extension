@@ -30,6 +30,11 @@
         "https://roll20.net/*"
       ],
       "js": [
+        "utils.js",
+        "performance_utils.js",
+        "avatar_processor.js",
+        "style_processor.js",
+        "dom_processor.js",
         "content.js"
       ],
       "run_at": "document_idle"

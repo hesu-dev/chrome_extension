@@ -2,6 +2,7 @@ const targetColorEl = document.getElementById("targetColor");
 const colorFilterEnabledEl = document.getElementById("colorFilterEnabled");
 const hiddenTextEnabledEl = document.getElementById("hiddenTextEnabled");
 const downloadBundlePageEl = document.getElementById("downloadBundlePage");
+const copyBundlePageEl = document.getElementById("copyBundlePage");
 const downloadTest2El = document.getElementById("downloadTest2");
 const avatarEditorEl = document.getElementById("avatarEditor");
 const avatarListEl = document.getElementById("avatarList");
@@ -35,9 +36,61 @@ function randomRequestId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function requestToTab(tabId, messageType, extra = {}) {
+function isSupportedTabUrl(url) {
+  if (!url) return false;
+  return /^https?:\/\//i.test(url);
+}
+
+function normalizeUiError(error) {
+  const message = (error && error.message ? error.message : String(error || "")).trim();
+
+  if (/Could not establish connection/i.test(message)) {
+    return "오류 코드: 5 - 페이지와 연결하지 못했습니다. Roll20 게임 탭에서 다시 시도해주세요.";
+  }
+  if (/Receiving end does not exist/i.test(message)) {
+    return "오류 코드: 5 - 컨텐츠 스크립트가 아직 준비되지 않았습니다. 페이지를 새로고침 후 다시 시도해주세요.";
+  }
+  if (/cannot access contents of url/i.test(message)) {
+    return "현재 탭에서는 동작할 수 없습니다. Roll20 웹페이지 탭에서 실행해주세요.";
+  }
+  if (/응답 시간이 초과/i.test(message)) {
+    return "요청 시간이 초과되었습니다. 페이지가 완전히 로드된 뒤 다시 시도해주세요.";
+  }
+
+  return message || "알 수 없는 오류가 발생했습니다.";
+}
+
+// Check if content script is ready
+async function ensureContentScriptLoaded(tabId) {
+  try {
+    const response = await requestToTab(tabId, "ROLL20_CLEANER_PING", {}, 2000);
+    if (response && response.ok) {
+      console.log("[Roll20Cleaner] Content script already loaded.");
+      return true;
+    }
+  } catch (e) {
+    console.log("[Roll20Cleaner] Content script not responding, injecting...");
+  }
+
+  // If ping failed, inject scripts
+  await injectContentScript(tabId);
+
+  // Wait a bit for scripts to initialize
+  await new Promise(r => setTimeout(r, 500));
+
+  // Ping again to verify
+  try {
+    const response = await requestToTab(tabId, "ROLL20_CLEANER_PING", {}, 2000);
+    return response && response.ok;
+  } catch (e) {
+    console.error("[Roll20Cleaner] Script injection failed or script crashed:", e);
+    return false;
+  }
+}
+
+function requestToTab(tabId, messageType, extra = {}, timeoutMs = 120000) {
   return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => reject(new Error("응답 시간이 초과되었습니다.")), 120000);
+    const timeoutId = setTimeout(() => reject(new Error("응답 시간이 초과되었습니다.")), timeoutMs);
     chrome.tabs.sendMessage(tabId, { type: messageType, ...extra }, (response) => {
       clearTimeout(timeoutId);
       if (chrome.runtime.lastError) {
@@ -54,7 +107,15 @@ function injectContentScript(tabId) {
     chrome.scripting.executeScript(
       {
         target: { tabId },
-        files: ["content.js"],
+        // Inject ALL modules in correct order
+        files: [
+          "utils.js",
+          "performance_utils.js",
+          "avatar_processor.js",
+          "style_processor.js",
+          "dom_processor.js",
+          "content.js"
+        ],
       },
       () => {
         if (chrome.runtime.lastError) {
@@ -68,17 +129,76 @@ function injectContentScript(tabId) {
 }
 
 async function requestWithRecovery(tabId, messageType, extra = {}) {
-  try {
-    return await requestToTab(tabId, messageType, extra);
-  } catch (error) {
-    await injectContentScript(tabId);
-    return requestToTab(tabId, messageType, extra);
+  const ready = await ensureContentScriptLoaded(tabId);
+  if (!ready) {
+    throw new Error("컨텐츠 스크립트 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
   }
+  return await requestToTab(tabId, messageType, extra);
 }
 
-async function getActiveTabId() {
+async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab?.id || 0;
+  return tab || null;
+}
+
+async function getValidatedActiveTabId() {
+  const tab = await getActiveTab();
+  if (!tab?.id) {
+    throw new Error("현재 활성 탭을 찾을 수 없습니다.");
+  }
+  if (!isSupportedTabUrl(tab.url || "")) {
+    throw new Error("현재 탭에서는 동작할 수 없습니다. Roll20 웹페이지 탭에서 실행해주세요.");
+  }
+  return tab.id;
+}
+
+async function runHtmlAction({
+  startStatus,
+  successStatus,
+  failedPrefix,
+  messageType,
+  extra = {},
+  withProgress = false,
+}) {
+  try {
+    const tabId = await getValidatedActiveTabId();
+
+    let requestId = "";
+    if (withProgress) {
+      requestId = randomRequestId();
+      activeProgressRequestId = requestId;
+      setProgress(5, "준비 중...");
+    }
+
+    setStatus(startStatus);
+    const response = await requestWithRecovery(tabId, messageType, {
+      ...extra,
+      ...(withProgress ? { requestId } : {}),
+    });
+
+    if (!response?.ok) {
+      const rawMessage = response?.errorMessage || "처리에 실패했습니다.";
+      const codePrefix = response?.errorCode ? `오류 코드: ${response.errorCode} - ` : "";
+      throw new Error(`${codePrefix}${rawMessage}`);
+    }
+
+    if (withProgress) {
+      setProgress(100, "완료되었습니다.");
+      activeProgressRequestId = "";
+      setTimeout(() => hideProgress(), 800);
+    }
+
+    setStatus(successStatus);
+    return response;
+  } catch (error) {
+    if (withProgress) {
+      activeProgressRequestId = "";
+      hideProgress();
+    }
+    console.error("[Roll20Cleaner] Action failed:", error);
+    setStatus(`${failedPrefix}: ${normalizeUiError(error)}`);
+    return null;
+  }
 }
 
 function renderAvatarMappings(mappings) {
@@ -162,47 +282,28 @@ targetColorEl.addEventListener("keyup", (event) => {
 });
 
 downloadBundlePageEl.addEventListener("click", async () => {
-  try {
-    const tabId = await getActiveTabId();
-    if (!tabId) {
-      setStatus("현재 활성 탭을 찾을 수 없습니다.");
-      return;
-    }
+  await runHtmlAction({
+    startStatus: "HTML 파일을 준비하는 중입니다...",
+    successStatus: "다운로드가 시작되었습니다.",
+    failedPrefix: "다운로드에 실패했습니다",
+    messageType: "DOWNLOAD_BUNDLED_HTML_DIRECT",
+    withProgress: true,
+  });
+});
 
-    const requestId = randomRequestId();
-    activeProgressRequestId = requestId;
-    setStatus("HTML 파일을 준비하는 중입니다...");
-    setProgress(5, "준비 중...");
-
-    const response = await requestWithRecovery(tabId, "DOWNLOAD_BUNDLED_HTML_DIRECT", {
-      requestId,
-    });
-
-    if (!response?.ok) {
-      setStatus("HTML 데이터를 받지 못했습니다.");
-      activeProgressRequestId = "";
-      hideProgress();
-      return;
-    }
-
-    setProgress(100, "완료되었습니다.");
-    setStatus("다운로드가 시작되었습니다.");
-    activeProgressRequestId = "";
-    setTimeout(() => hideProgress(), 800);
-  } catch (error) {
-    setStatus("다운로드에 실패했습니다.");
-    activeProgressRequestId = "";
-    hideProgress();
-  }
+copyBundlePageEl.addEventListener("click", async () => {
+  await runHtmlAction({
+    startStatus: "복사할 HTML을 준비하는 중입니다...",
+    successStatus: "클립보드에 HTML이 복사되었습니다.",
+    failedPrefix: "복사에 실패했습니다",
+    messageType: "COPY_BUNDLED_HTML_DIRECT",
+    withProgress: false,
+  });
 });
 
 downloadTest2El.addEventListener("click", async () => {
   try {
-    const tabId = await getActiveTabId();
-    if (!tabId) {
-      setStatus("현재 활성 탭을 찾을 수 없습니다.");
-      return;
-    }
+    const tabId = await getValidatedActiveTabId();
 
     setStatus("이름/아바타 목록을 불러오는 중입니다...");
     const response = await requestWithRecovery(tabId, "GET_AVATAR_MAPPINGS");
@@ -218,17 +319,13 @@ downloadTest2El.addEventListener("click", async () => {
     avatarEditorEl.classList.remove("hidden");
     setStatus(`총 ${mappings.length}개의 이름을 불러왔습니다.`);
   } catch (error) {
-    setStatus("아바타 목록을 불러오지 못했습니다.");
+    setStatus(`아바타 목록을 불러오지 못했습니다: ${normalizeUiError(error)}`);
   }
 });
 
 downloadAvatarMappedEl.addEventListener("click", async () => {
   try {
-    const tabId = await getActiveTabId();
-    if (!tabId) {
-      setStatus("현재 활성 탭을 찾을 수 없습니다.");
-      return;
-    }
+    const tabId = await getValidatedActiveTabId();
 
     if (!currentAvatarMappings.length) {
       setStatus("먼저 테스트용2 버튼으로 목록을 불러오세요.");
@@ -253,7 +350,7 @@ downloadAvatarMappedEl.addEventListener("click", async () => {
 
     setStatus("아바타 치환 HTML 다운로드가 시작되었습니다.");
   } catch (error) {
-    setStatus("아바타 치환 다운로드에 실패했습니다.");
+    setStatus(`아바타 치환 다운로드에 실패했습니다: ${normalizeUiError(error)}`);
   }
 });
 
