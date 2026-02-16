@@ -6,11 +6,14 @@
 
     const MINIMAL_STYLE_PROPS = [
         "display", "visibility", "opacity",
+        "float", "clear",
         "width", "height", "box-sizing",
+        "min-width", "max-width", "min-height", "max-height",
         "margin-top", "margin-right", "margin-bottom", "margin-left",
         "padding-top", "padding-right", "padding-bottom", "padding-left",
         "font-family", "font-size", "font-weight", "line-height", "color",
-        "white-space", "text-align",
+        "white-space", "text-align", "vertical-align",
+        "background-color", "background-image", "background-position", "background-size", "background-repeat",
     ];
 
     const BALANCED_STYLE_PROPS = [
@@ -20,10 +23,14 @@
         "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
         "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
         "border-radius",
-        "background-color", "background-position", "background-size", "background-repeat",
+        "background-color", "background-image", "background-position", "background-size", "background-repeat", "background-attachment",
         "overflow", "overflow-x", "overflow-y",
         "transform", "transform-origin",
-        "justify-content", "align-items", "align-content", "flex-direction",
+        "justify-content", "align-items", "align-content", "flex-direction", "flex-wrap", "gap", "row-gap", "column-gap",
+        "grid-template-columns", "grid-template-rows", "grid-auto-columns", "grid-auto-rows", "grid-auto-flow",
+        "grid-column-start", "grid-column-end", "grid-row-start", "grid-row-end",
+        "place-content", "place-items", "justify-self", "align-self",
+        "text-shadow", "box-shadow",
     ];
 
     function normalizeColor(color) {

@@ -497,16 +497,33 @@
     }
 
     if (message?.type === "DOWNLOAD_BUNDLED_HTML_DIRECT") {
-      buildVisibleHtmlWithoutHeadAssets(message?.requestId || "", true)
-        .then((result) => {
-          if (downloadHtmlInPage) downloadHtmlInPage(result.html, getDownloadNameBase());
-          sendResponse({ ok: true });
-        })
-        .catch((e) => {
+      const requestId = message?.requestId || "";
+      sendResponse({ ok: true, accepted: true });
+
+      (async () => {
+        try {
+          const result = await buildVisibleHtmlWithoutHeadAssets(requestId, true);
+          if (downloadHtmlInPage) {
+            downloadHtmlInPage(result.html, getDownloadNameBase());
+          }
+          chrome.runtime.sendMessage({
+            type: "BUNDLE_DONE",
+            requestId,
+            ok: true,
+            htmlBytes: result.bytes,
+            elapsedMs: result.elapsedMs,
+          });
+        } catch (e) {
           console.error(e);
-          sendResponse({ ok: false });
-        });
-      return true;
+          chrome.runtime.sendMessage({
+            type: "BUNDLE_DONE",
+            requestId,
+            ok: false,
+            errorMessage: e?.message ? String(e.message) : "다운로드 생성 중 오류가 발생했습니다.",
+          });
+        }
+      })();
+      return;
     }
 
     if (message?.type === "COPY_BUNDLED_HTML_DIRECT") {

@@ -9,7 +9,7 @@
     Object.assign(root.Roll20CleanerPerf, api);
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
     const AUTO_MODE_FULL_THRESHOLD = 8000;
-    const AUTO_MODE_MINIMAL_THRESHOLD = 25000;
+    const AUTO_MODE_MINIMAL_THRESHOLD = 200000;
 
     function toSafeInt(value) {
         const num = Number(value);

@@ -159,6 +159,7 @@ async function runHtmlAction({
   messageType,
   extra = {},
   withProgress = false,
+  deferCompletion = false,
 }) {
   try {
     const tabId = await getValidatedActiveTabId();
@@ -182,7 +183,7 @@ async function runHtmlAction({
       throw new Error(`${codePrefix}${rawMessage}`);
     }
 
-    if (withProgress) {
+    if (withProgress && !deferCompletion) {
       setProgress(100, "완료되었습니다.");
       activeProgressRequestId = "";
       setTimeout(() => hideProgress(), 800);
@@ -284,10 +285,11 @@ targetColorEl.addEventListener("keyup", (event) => {
 downloadBundlePageEl.addEventListener("click", async () => {
   await runHtmlAction({
     startStatus: "HTML 파일을 준비하는 중입니다...",
-    successStatus: "다운로드가 시작되었습니다.",
+    successStatus: "다운로드 작업을 시작했습니다...",
     failedPrefix: "다운로드에 실패했습니다",
     messageType: "DOWNLOAD_BUNDLED_HTML_DIRECT",
     withProgress: true,
+    deferCompletion: true,
   });
 });
 
@@ -355,7 +357,24 @@ downloadAvatarMappedEl.addEventListener("click", async () => {
 });
 
 chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type !== "BUNDLE_PROGRESS") return;
-  if (!message.requestId || message.requestId !== activeProgressRequestId) return;
-  setProgress(message.percent ?? 0, message.label || "처리 중...");
+  if (message?.type === "BUNDLE_PROGRESS") {
+    if (!message.requestId || message.requestId !== activeProgressRequestId) return;
+    setProgress(message.percent ?? 0, message.label || "처리 중...");
+    return;
+  }
+
+  if (message?.type === "BUNDLE_DONE") {
+    if (!message.requestId || message.requestId !== activeProgressRequestId) return;
+    if (message.ok) {
+      setProgress(100, "완료되었습니다.");
+      setStatus("다운로드가 시작되었습니다.");
+      activeProgressRequestId = "";
+      setTimeout(() => hideProgress(), 900);
+      return;
+    }
+    activeProgressRequestId = "";
+    hideProgress();
+    const errorText = message.errorMessage ? `: ${message.errorMessage}` : "";
+    setStatus(`다운로드에 실패했습니다${errorText}`);
+  }
 });
