@@ -111,6 +111,8 @@ function injectContentScript(tabId) {
         files: [
           "utils.js",
           "performance_utils.js",
+          "avatar_rules.js",
+          "html_chunk_serializer.js",
           "avatar_processor.js",
           "style_processor.js",
           "dom_processor.js",
@@ -199,6 +201,81 @@ async function runHtmlAction({
     console.error("[Roll20Cleaner] Action failed:", error);
     setStatus(`${failedPrefix}: ${normalizeUiError(error)}`);
     return null;
+  }
+}
+
+async function runAvatarReplacementStream(tabId, replacements) {
+  return new Promise((resolve, reject) => {
+    const requestId = randomRequestId();
+    let settled = false;
+    const port = chrome.tabs.connect(tabId, { name: "ROLL20_CLEANER_STREAM" });
+
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      try {
+        port.disconnect();
+      } catch (e) {
+        // noop
+      }
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish(new Error("응답 시간이 초과되었습니다."));
+    }, 180000);
+
+    port.onMessage.addListener((message) => {
+      if (!message?.requestId || message.requestId !== requestId) return;
+      if (message.type === "STREAM_PROGRESS") {
+        setProgress(message.percent ?? 0, message.label || "처리 중...");
+        return;
+      }
+      if (message.type === "STREAM_DONE") {
+        clearTimeout(timeoutId);
+        if (message.ok) {
+          finish();
+          return;
+        }
+        finish(new Error(message.errorMessage || "다운로드 생성 중 오류가 발생했습니다."));
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      if (settled) return;
+      clearTimeout(timeoutId);
+      const raw = chrome.runtime.lastError?.message || "연결이 종료되었습니다.";
+      finish(new Error(raw));
+    });
+
+    setProgress(5, "치환 요청 준비 중...");
+    port.postMessage({
+      type: "START_PROFILE_IMAGE_REPLACEMENT_DOWNLOAD",
+      requestId,
+      replacements,
+    });
+  });
+}
+
+async function supportsAvatarReplacementStream(tabId) {
+  try {
+    const response = await requestWithRecovery(tabId, "ROLL20_CLEANER_STREAM_READY", {});
+    return !!response?.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function runAvatarReplacementFallback(tabId, replacements) {
+  const response = await requestWithRecovery(tabId, "DOWNLOAD_WITH_AVATAR_REPLACEMENTS", {
+    replacements,
+  });
+  if (!response?.ok) {
+    throw new Error("아바타 치환 다운로드에 실패했습니다.");
   }
 }
 
@@ -330,7 +407,7 @@ downloadAvatarMappedEl.addEventListener("click", async () => {
     const tabId = await getValidatedActiveTabId();
 
     if (!currentAvatarMappings.length) {
-      setStatus("먼저 테스트용2 버튼으로 목록을 불러오세요.");
+      setStatus("먼저 프로필 이미지 교체 버튼으로 목록을 불러오세요.");
       return;
     }
 
@@ -340,18 +417,27 @@ downloadAvatarMappedEl.addEventListener("click", async () => {
       return;
     }
 
-    setStatus("아바타를 치환한 HTML을 만드는 중입니다...");
-    const response = await requestWithRecovery(tabId, "DOWNLOAD_WITH_AVATAR_REPLACEMENTS", {
-      replacements,
-    });
-
-    if (!response?.ok) {
-      setStatus("아바타 치환 다운로드에 실패했습니다.");
+    const ready = await ensureContentScriptLoaded(tabId);
+    if (!ready) {
+      setStatus("컨텐츠 스크립트 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
       return;
     }
 
-    setStatus("아바타 치환 HTML 다운로드가 시작되었습니다.");
+    setStatus("프로필 이미지 교체 HTML을 만드는 중입니다...");
+    const streamSupported = await supportsAvatarReplacementStream(tabId);
+    if (streamSupported) {
+      await runAvatarReplacementStream(tabId, replacements);
+      setProgress(100, "완료되었습니다.");
+      setStatus("프로필 이미지 교체 HTML 다운로드가 시작되었습니다.");
+      setTimeout(() => hideProgress(), 900);
+      return;
+    }
+
+    await runAvatarReplacementFallback(tabId, replacements);
+    hideProgress();
+    setStatus("프로필 이미지 교체 HTML 다운로드가 시작되었습니다.");
   } catch (error) {
+    hideProgress();
     setStatus(`아바타 치환 다운로드에 실패했습니다: ${normalizeUiError(error)}`);
   }
 });

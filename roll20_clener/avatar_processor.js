@@ -2,6 +2,7 @@
 
 (function () {
     const { toAbsoluteUrl, fetchDataUrl, mapLimit } = window.Roll20CleanerUtils;
+    const avatarRules = window.Roll20CleanerAvatarRules || {};
 
     const avatarRedirectCache = new Map();
     const avatarDataUrlCache = new Map();
@@ -192,12 +193,13 @@
 
             const src = imgEl.getAttribute("src") || "";
             if (!src) continue;
+            const absolute = toAbsoluteUrl(src);
+            if (!absolute || !isRoll20AvatarUrl(absolute)) continue;
 
-            messageData.push({ name, src });
+            messageData.push({ name, src: absolute });
 
             // Only add to pending if we haven't resolved it yet and it looks like a Roll20 URL
-            const absolute = toAbsoluteUrl(src);
-            if (absolute && isRoll20AvatarUrl(absolute) && !avatarRedirectCache.has(absolute)) {
+            if (!avatarRedirectCache.has(absolute)) {
                 pendingResolutions.add(absolute);
             }
         }
@@ -222,13 +224,13 @@
                 finalSrc = loadedImageUrlMap.get(absolute);
             }
 
-            const pairKey = `${name}|||${finalSrc}`;
+            const pairKey = `${name}|||${absolute}`;
             if (!byPair.has(pairKey)) {
                 byPair.set(pairKey, {
                     id: pairKey,
                     name,
                     avatarUrl: finalSrc,
-                    originalUrl: finalSrc,
+                    originalUrl: absolute,
                 });
             }
         }
@@ -237,24 +239,24 @@
     }
 
     function applyAvatarReplacementsToClone(clone, replacements) {
-        const normalizedReplacements = new Map();
-        (Array.isArray(replacements) ? replacements : []).forEach((item) => {
-            const name = normalizeSpeakerName(item?.name || "");
-            const originalUrl = toAbsoluteUrl(item?.originalUrl || "");
-            const newUrl = (item?.newUrl || "").trim();
-            if (!name || !originalUrl || !newUrl) return;
-            normalizedReplacements.set(`${name}|||${originalUrl}`, newUrl);
-        });
-
-        if (!normalizedReplacements.size) return;
+        const maps = avatarRules.buildReplacementMaps
+            ? avatarRules.buildReplacementMaps(replacements, { toAbsoluteUrl, normalizeSpeakerName })
+            : { byPair: new Map(), byOriginal: new Map() };
+        if (!maps.byPair.size && !maps.byOriginal.size) return;
 
         const messageNodes = clone.querySelectorAll("div.message");
         messageNodes.forEach((messageEl) => {
             const name = getMessageSpeakerName(messageEl);
             const imgEl = getMessageAvatarImg(messageEl);
             if (!name || !imgEl) return;
-            const currentSrc = toAbsoluteUrl(imgEl.getAttribute("src") || "");
-            const replacement = normalizedReplacements.get(`${name}|||${currentSrc}`);
+            const currentSrc = imgEl.getAttribute("src") || "";
+            const replacement = avatarRules.findReplacementForMessage
+                ? avatarRules.findReplacementForMessage(
+                    { name, currentSrc },
+                    maps,
+                    { toAbsoluteUrl, normalizeSpeakerName }
+                )
+                : "";
             if (replacement) imgEl.setAttribute("src", replacement);
         });
     }

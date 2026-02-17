@@ -3,6 +3,7 @@
 (function () {
     const { toAbsoluteUrl, mapLimit, fetchDataUrl } = window.Roll20CleanerUtils;
     const perf = window.Roll20CleanerPerf || {};
+    const htmlChunk = window.Roll20CleanerHtmlChunk || {};
     // Roll20CleanerStyle might not be fully initialized if this script runs before it, 
     // but the functions are called later. Phew.
 
@@ -326,6 +327,70 @@
         setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
 
+    function getAttributesFromElement(node) {
+        if (!node || !node.attributes) return [];
+        return Array.from(node.attributes).map((attr) => ({ name: attr.name, value: attr.value }));
+    }
+
+    function serializeNodeChildrenChunks(node, serializer, maxChunkSize) {
+        const chunks = [];
+        const children = node?.childNodes ? Array.from(node.childNodes) : [];
+        children.forEach((child) => {
+            const html = serializer.serializeToString(child);
+            if (htmlChunk.chunkString) {
+                htmlChunk.chunkString(html, maxChunkSize).forEach((part) => chunks.push(part));
+            } else {
+                chunks.push(html);
+            }
+        });
+        return chunks;
+    }
+
+    function serializeDocumentCloneToChunks(clone, options = {}) {
+        if (!clone || clone.nodeType !== 1) return [];
+        const maxChunkSize = Math.max(1024, Number(options.maxChunkSize) || 1024 * 512);
+        const serializer = new XMLSerializer();
+        const doctypeName = options.doctypeName || "";
+        const head = clone.querySelector("head");
+        const body = clone.querySelector("body");
+
+        const headChildHtml = head
+            ? serializeNodeChildrenChunks(head, serializer, maxChunkSize)
+            : [];
+        const bodyChildHtml = body
+            ? serializeNodeChildrenChunks(body, serializer, maxChunkSize)
+            : [];
+
+        if (htmlChunk.createDocumentChunks) {
+            return htmlChunk.createDocumentChunks({
+                doctypeName,
+                htmlAttrs: getAttributesFromElement(clone),
+                headAttrs: getAttributesFromElement(head),
+                bodyAttrs: getAttributesFromElement(body),
+                headChildHtml,
+                bodyChildHtml,
+                maxChunkSize,
+            });
+        }
+
+        const fallback = serializer.serializeToString(clone);
+        return doctypeName ? [`<!DOCTYPE ${doctypeName}>\n`, fallback] : [fallback];
+    }
+
+    function downloadHtmlChunksInPage(chunks, filenameBase) {
+        const filename = `${sanitizeFilenameBase(filenameBase)}.html`;
+        const safeChunks = Array.isArray(chunks) ? chunks.filter((item) => typeof item === "string" && item.length > 0) : [];
+        const blob = new Blob(safeChunks, { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
     window.Roll20CleanerData = {
         ROOT_CLASS,
         MESSAGE_SELECTOR: "div.message",
@@ -349,7 +414,9 @@
         downloadHtmlInPage,
         copyTextToClipboard,
         sanitizeFilenameBase,
-        buildLoadedImageUrlMap // Export this for content.js
+        buildLoadedImageUrlMap, // Export this for content.js
+        serializeDocumentCloneToChunks,
+        downloadHtmlChunksInPage
     });
     console.log("[Roll20Cleaner] Dom Processor loaded");
 })();

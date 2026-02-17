@@ -370,6 +370,22 @@
     return result.html;
   }
 
+  function buildProfileImageReplacementChunks(replacements) {
+    const { applyAvatarReplacementsToClone } = getAvatar();
+    const { serializeDocumentCloneToChunks } = getDom();
+    const clone = document.documentElement.cloneNode(true);
+    if (applyAvatarReplacementsToClone) {
+      applyAvatarReplacementsToClone(clone, replacements);
+    }
+    if (!serializeDocumentCloneToChunks) {
+      throw new Error("serializeDocumentCloneToChunks 함수가 준비되지 않았습니다.");
+    }
+    return serializeDocumentCloneToChunks(clone, {
+      doctypeName: document.doctype?.name || "",
+      maxChunkSize: 1024 * 512,
+    });
+  }
+
   // --- Helper: Campaign Name ---
 
   function parseCampaignNameFromHref(href) {
@@ -456,10 +472,19 @@
     return { errorCode: 1, errorMessage: message };
   }
 
+  function toSimpleErrorMessage(error) {
+    return error?.message ? String(error.message) : "처리 중 오류가 발생했습니다.";
+  }
+
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // console.log("[Roll20Cleaner] Message received:", message.type);
 
     if (message?.type === "ROLL20_CLEANER_PING") {
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message?.type === "ROLL20_CLEANER_STREAM_READY") {
       sendResponse({ ok: true });
       return;
     }
@@ -567,6 +592,49 @@
         });
       return true;
     }
+  });
+
+  chrome.runtime.onConnect.addListener((port) => {
+    if (!port || port.name !== "ROLL20_CLEANER_STREAM") return;
+
+    port.onMessage.addListener((message) => {
+      if (message?.type !== "START_PROFILE_IMAGE_REPLACEMENT_DOWNLOAD") return;
+
+      const requestId = message?.requestId || "";
+      try {
+        port.postMessage({
+          type: "STREAM_PROGRESS",
+          requestId,
+          percent: 10,
+          label: "DOM 스냅샷 복제 중...",
+        });
+        const chunks = buildProfileImageReplacementChunks(message?.replacements || []);
+        port.postMessage({
+          type: "STREAM_PROGRESS",
+          requestId,
+          percent: 80,
+          label: "청크 다운로드 준비 중...",
+        });
+        if (getDom().downloadHtmlChunksInPage) {
+          getDom().downloadHtmlChunksInPage(chunks, getDownloadNameBase());
+        } else if (downloadHtmlInPage) {
+          downloadHtmlInPage(chunks.join(""), getDownloadNameBase());
+        }
+        port.postMessage({
+          type: "STREAM_DONE",
+          requestId,
+          ok: true,
+        });
+      } catch (error) {
+        console.error(error);
+        port.postMessage({
+          type: "STREAM_DONE",
+          requestId,
+          ok: false,
+          errorMessage: toSimpleErrorMessage(error),
+        });
+      }
+    });
   });
 
 })();

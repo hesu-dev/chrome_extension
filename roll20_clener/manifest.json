@@ -32,6 +32,8 @@
       "js": [
         "utils.js",
         "performance_utils.js",
+        "avatar_rules.js",
+        "html_chunk_serializer.js",
         "avatar_processor.js",
         "style_processor.js",
         "dom_processor.js",
