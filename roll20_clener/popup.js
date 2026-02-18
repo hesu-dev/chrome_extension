@@ -12,14 +12,83 @@ const progressBarEl = document.getElementById("progressBar");
 const progressTextEl = document.getElementById("progressText");
 const statusEl = document.getElementById("status");
 const applyFeedback = window.Roll20CleanerFilterApplyFeedback || {};
+const appEl = document.querySelector(".app");
 
 let activeProgressRequestId = "";
 let activeSettingApplyRequestId = "";
 let currentAvatarMappings = [];
 const pendingSettingApplyRequests = new Map();
+let readyStatusProbeTimerId = null;
+const inputLockReasons = new Set();
+
+const READY_STATUS_LOADING_TEXT = "페이지 로딩 중입니다. 잠시 후 다시 시도하세요.";
+const READY_STATUS_READY_TEXT = "준비되었습니다.";
+const READY_STATUS_PROBE_INTERVAL_MS = 1200;
 
 function setStatus(text) {
   statusEl.textContent = text;
+}
+
+function applyInputLockState() {
+  const disabled = inputLockReasons.size > 0;
+  const lockTargets = document.querySelectorAll("input, button");
+  lockTargets.forEach((el) => {
+    el.disabled = disabled;
+  });
+  if (appEl) {
+    appEl.classList.toggle("ui-locked", disabled);
+  }
+}
+
+function lockInputs(reason) {
+  if (!reason) return;
+  inputLockReasons.add(reason);
+  applyInputLockState();
+}
+
+function unlockInputs(reason) {
+  if (!reason) return;
+  inputLockReasons.delete(reason);
+  applyInputLockState();
+}
+
+function stopReadyStatusProbe() {
+  if (!readyStatusProbeTimerId) return;
+  clearTimeout(readyStatusProbeTimerId);
+  readyStatusProbeTimerId = null;
+  unlockInputs("ready-status-probe");
+}
+
+function scheduleReadyStatusProbe() {
+  stopReadyStatusProbe();
+  lockInputs("ready-status-probe");
+  readyStatusProbeTimerId = setTimeout(async () => {
+    if (statusEl.textContent !== READY_STATUS_LOADING_TEXT) {
+      stopReadyStatusProbe();
+      return;
+    }
+
+    try {
+      const tab = await getActiveTab();
+      if (!tab?.id || !isSupportedTabUrl(tab.url || "")) {
+        stopReadyStatusProbe();
+        return;
+      }
+
+      const response = await requestToTab(tab.id, "ROLL20_CLEANER_PING", {}, 1500).catch(() => null);
+      if (response?.ok) {
+        setStatus(READY_STATUS_READY_TEXT);
+        stopReadyStatusProbe();
+        return;
+      }
+    } catch (error) {
+      // Keep probing while popup stays in "loading" state.
+    }
+
+    if (statusEl.textContent === READY_STATUS_LOADING_TEXT) {
+      scheduleReadyStatusProbe();
+    }
+  }, READY_STATUS_PROBE_INTERVAL_MS);
 }
 
 function setProgress(percent, text) {
@@ -168,12 +237,15 @@ async function updateInitialReadyStatus() {
 
     const response = await requestToTab(tab.id, "ROLL20_CLEANER_PING", {}, 1500).catch(() => null);
     if (response?.ok) {
-      setStatus("준비되었습니다.");
+      setStatus(READY_STATUS_READY_TEXT);
+      stopReadyStatusProbe();
       return;
     }
 
-    setStatus("페이지 로딩 중입니다. 잠시 후 다시 시도하세요.");
+    setStatus(READY_STATUS_LOADING_TEXT);
+    scheduleReadyStatusProbe();
   } catch (error) {
+    stopReadyStatusProbe();
     setStatus("상태 확인에 실패했습니다. 다시 시도해주세요.");
   }
 }
@@ -452,6 +524,7 @@ async function persistTextSetting() {
 }
 
 async function persistFilterSettingWithApplyState() {
+  lockInputs("filter-apply");
   clearPendingSettingApply();
   let saved = false;
   try {
@@ -479,6 +552,7 @@ async function persistFilterSettingWithApplyState() {
       setStatus(getSavedStatusMessage());
       hideProgress();
       activeSettingApplyRequestId = "";
+      unlockInputs("filter-apply");
       return;
     }
 
@@ -488,23 +562,28 @@ async function persistFilterSettingWithApplyState() {
     setStatus(getSavedStatusMessage());
     setTimeout(() => hideProgress(), 800);
     activeSettingApplyRequestId = "";
+    unlockInputs("filter-apply");
   } catch (error) {
     hideProgress();
     if (saved) {
       setStatus(getSavedStatusMessage());
       activeSettingApplyRequestId = "";
+      unlockInputs("filter-apply");
       return;
     }
     if (isNonFatalApplyDispatchError(error)) {
       setStatus(getSavedStatusMessage());
       activeSettingApplyRequestId = "";
+      unlockInputs("filter-apply");
       return;
     }
     if (/취소되었습니다/.test(String(error?.message || ""))) {
+      unlockInputs("filter-apply");
       return;
     }
     setStatus(`설정 저장에 실패했습니다: ${normalizeUiError(error)}`);
     activeSettingApplyRequestId = "";
+    unlockInputs("filter-apply");
   }
 }
 
@@ -651,4 +730,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.targetColor) {
     targetColorEl.value = String(changes.targetColor.newValue || "");
   }
+});
+
+window.addEventListener("unload", () => {
+  stopReadyStatusProbe();
 });
