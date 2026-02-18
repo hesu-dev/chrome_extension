@@ -25,7 +25,7 @@
       const name = normalizeSpeakerName(item?.name || "");
       const originalUrl = toAbsoluteUrl(item?.originalUrl || "");
       const newUrl = toText(item?.newUrl || "");
-      if (!name || !originalUrl || !newUrl || !isAvatarPathUrl(originalUrl) || !isAllowedImageUrl(newUrl)) return;
+      if (!name || !originalUrl || !newUrl || !isAllowedImageUrl(newUrl)) return;
 
       const pairKey = `${name}|||${originalUrl}`;
       byPair.set(pairKey, newUrl);
@@ -43,7 +43,7 @@
       typeof deps.normalizeSpeakerName === "function" ? deps.normalizeSpeakerName : (v) => toText(v);
     const name = normalizeSpeakerName(message?.name || "");
     const currentSrc = toAbsoluteUrl(message?.currentSrc || "");
-    if (!name || !currentSrc || !isAvatarPathUrl(currentSrc)) return "";
+    if (!name || !currentSrc) return "";
 
     const byPair = maps?.byPair instanceof Map ? maps.byPair : new Map();
     const byOriginal = maps?.byOriginal instanceof Map ? maps.byOriginal : new Map();

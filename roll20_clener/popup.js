@@ -1,28 +1,28 @@
 const targetColorEl = document.getElementById("targetColor");
 const colorFilterEnabledEl = document.getElementById("colorFilterEnabled");
 const hiddenTextEnabledEl = document.getElementById("hiddenTextEnabled");
-const downloadBundlePageEl = document.getElementById("downloadBundlePage");
-const copyBundlePageEl = document.getElementById("copyBundlePage");
 const downloadTest2El = document.getElementById("downloadTest2");
 const avatarEditorEl = document.getElementById("avatarEditor");
 const avatarListEl = document.getElementById("avatarList");
-const downloadAvatarMappedEl = document.getElementById("downloadAvatarMapped");
+const downloadAvatarMappedHtmlEl = document.getElementById("downloadAvatarMappedHtml");
+const downloadAvatarMappedJsonEl = document.getElementById("downloadAvatarMappedJson");
 const progressWrapEl = document.getElementById("progressWrap");
 const progressBarEl = document.getElementById("progressBar");
 const progressTextEl = document.getElementById("progressText");
 const statusEl = document.getElementById("status");
 const applyFeedback = window.Roll20CleanerFilterApplyFeedback || {};
+const featureFlags = window.Roll20CleanerFeatureFlags || {};
 const appEl = document.querySelector(".app");
+const enableJsonDownload = !!featureFlags.enableJsonDownload;
 
-let activeProgressRequestId = "";
 let activeSettingApplyRequestId = "";
 let currentAvatarMappings = [];
 const pendingSettingApplyRequests = new Map();
 let readyStatusProbeTimerId = null;
 const inputLockReasons = new Set();
 
-const READY_STATUS_LOADING_TEXT = "설정 적용 중입니다. 로딩이 끝난 이후 사용해주세요.";
-const READY_STATUS_READY_TEXT = "준비 되었습니다.";
+const READY_STATUS_LOADING_TEXT = "페이지 로딩 중입니다. 잠시 후 다시 시도하세요.";
+const READY_STATUS_READY_TEXT = "준비되었습니다.";
 const READY_STATUS_PROBE_INTERVAL_MS = 1200;
 
 function setStatus(text) {
@@ -186,6 +186,8 @@ function injectContentScript(tabId) {
           "avatar_rules.js",
           "html_chunk_serializer.js",
           "avatar_processor.js",
+          "chat_json_export.js",
+          "chat_role_parser.js",
           "style_processor.js",
           "dom_processor.js",
           "root_state.js",
@@ -319,56 +321,6 @@ function waitForSettingApplyDone(requestId, timeoutMs = 20000) {
   });
 }
 
-async function runHtmlAction({
-  startStatus,
-  successStatus,
-  failedPrefix,
-  messageType,
-  extra = {},
-  withProgress = false,
-  deferCompletion = false,
-}) {
-  try {
-    const tabId = await getValidatedActiveTabId();
-
-    let requestId = "";
-    if (withProgress) {
-      requestId = randomRequestId();
-      activeProgressRequestId = requestId;
-      setProgress(5, "준비 중...");
-    }
-
-    setStatus(startStatus);
-    const response = await requestWithRecovery(tabId, messageType, {
-      ...extra,
-      ...(withProgress ? { requestId } : {}),
-    });
-
-    if (!response?.ok) {
-      const rawMessage = response?.errorMessage || "처리에 실패했습니다.";
-      const codePrefix = response?.errorCode ? `오류 코드: ${response.errorCode} - ` : "";
-      throw new Error(`${codePrefix}${rawMessage}`);
-    }
-
-    if (withProgress && !deferCompletion) {
-      setProgress(100, "완료되었습니다.");
-      activeProgressRequestId = "";
-      setTimeout(() => hideProgress(), 800);
-    }
-
-    setStatus(successStatus);
-    return response;
-  } catch (error) {
-    if (withProgress) {
-      activeProgressRequestId = "";
-      hideProgress();
-    }
-    console.error("[Roll20Cleaner] Action failed:", error);
-    setStatus(`${failedPrefix}: ${normalizeUiError(error)}`);
-    return null;
-  }
-}
-
 async function runAvatarReplacementStream(tabId, replacements) {
   return new Promise((resolve, reject) => {
     const requestId = randomRequestId();
@@ -436,11 +388,20 @@ async function supportsAvatarReplacementStream(tabId) {
 }
 
 async function runAvatarReplacementFallback(tabId, replacements) {
-  const response = await requestWithRecovery(tabId, "DOWNLOAD_WITH_AVATAR_REPLACEMENTS", {
+  const response = await requestWithRecovery(tabId, "DOWNLOAD_WITH_AVATAR_REPLACEMENTS_HTML", {
     replacements,
   });
   if (!response?.ok) {
     throw new Error("아바타 치환 다운로드에 실패했습니다.");
+  }
+}
+
+async function runAvatarReplacementJsonDownload(tabId, replacements) {
+  const response = await requestWithRecovery(tabId, "DOWNLOAD_WITH_AVATAR_REPLACEMENTS_JSON", {
+    replacements,
+  });
+  if (!response?.ok) {
+    throw new Error(response?.errorMessage || "JSON 다운로드에 실패했습니다.");
   }
 }
 
@@ -502,6 +463,11 @@ chrome.storage.sync.get(
     colorFilterEnabledEl.checked = colorFilterEnabled;
     hiddenTextEnabledEl.checked = hiddenTextEnabled;
     targetColorEl.value = targetColor;
+    if (enableJsonDownload) {
+      downloadAvatarMappedJsonEl.classList.remove("hidden");
+    } else {
+      downloadAvatarMappedJsonEl.classList.add("hidden");
+    }
     updateInitialReadyStatus();
   }
 );
@@ -594,27 +560,6 @@ targetColorEl.addEventListener("keyup", (event) => {
   if (event.key === "Enter") persistTextSetting();
 });
 
-downloadBundlePageEl.addEventListener("click", async () => {
-  await runHtmlAction({
-    startStatus: "HTML 파일을 준비하는 중입니다...",
-    successStatus: "다운로드 작업을 시작했습니다...",
-    failedPrefix: "다운로드에 실패했습니다",
-    messageType: "DOWNLOAD_BUNDLED_HTML_DIRECT",
-    withProgress: true,
-    deferCompletion: true,
-  });
-});
-
-copyBundlePageEl.addEventListener("click", async () => {
-  await runHtmlAction({
-    startStatus: "복사할 HTML을 준비하는 중입니다...",
-    successStatus: "클립보드에 HTML이 복사되었습니다.",
-    failedPrefix: "복사에 실패했습니다",
-    messageType: "COPY_BUNDLED_HTML_DIRECT",
-    withProgress: false,
-  });
-});
-
 downloadTest2El.addEventListener("click", async () => {
   try {
     const tabId = await getValidatedActiveTabId();
@@ -637,7 +582,7 @@ downloadTest2El.addEventListener("click", async () => {
   }
 });
 
-downloadAvatarMappedEl.addEventListener("click", async () => {
+async function runAvatarMappedHtmlDownload() {
   try {
     const tabId = await getValidatedActiveTabId();
 
@@ -675,7 +620,42 @@ downloadAvatarMappedEl.addEventListener("click", async () => {
     hideProgress();
     setStatus(`아바타 치환 다운로드에 실패했습니다: ${normalizeUiError(error)}`);
   }
-});
+}
+
+async function runAvatarMappedJsonDownload() {
+  try {
+    const tabId = await getValidatedActiveTabId();
+    if (!currentAvatarMappings.length) {
+      setStatus("먼저 프로필 이미지 교체 버튼으로 목록을 불러오세요.");
+      return;
+    }
+
+    const replacements = collectAvatarReplacements();
+    if (!replacements.length) {
+      setStatus("적용할 이미지 링크가 없습니다.");
+      return;
+    }
+
+    const ready = await ensureContentScriptLoaded(tabId);
+    if (!ready) {
+      setStatus("컨텐츠 스크립트 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
+      return;
+    }
+
+    setStatus("프로필 이미지 교체 JSON을 만드는 중입니다...");
+    setProgress(20, "JSON 데이터를 정리 중입니다...");
+    await runAvatarReplacementJsonDownload(tabId, replacements);
+    setProgress(100, "완료되었습니다.");
+    setStatus("프로필 이미지 교체 JSON 다운로드가 시작되었습니다.");
+    setTimeout(() => hideProgress(), 900);
+  } catch (error) {
+    hideProgress();
+    setStatus(`JSON 다운로드에 실패했습니다: ${normalizeUiError(error)}`);
+  }
+}
+
+downloadAvatarMappedHtmlEl.addEventListener("click", runAvatarMappedHtmlDownload);
+downloadAvatarMappedJsonEl.addEventListener("click", runAvatarMappedJsonDownload);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "FILTER_APPLY_PROGRESS") {
@@ -697,26 +677,6 @@ chrome.runtime.onMessage.addListener((message) => {
     return;
   }
 
-  if (message?.type === "BUNDLE_PROGRESS") {
-    if (!message.requestId || message.requestId !== activeProgressRequestId) return;
-    setProgress(message.percent ?? 0, message.label || "처리 중...");
-    return;
-  }
-
-  if (message?.type === "BUNDLE_DONE") {
-    if (!message.requestId || message.requestId !== activeProgressRequestId) return;
-    if (message.ok) {
-      setProgress(100, "완료되었습니다.");
-      setStatus("다운로드가 시작되었습니다.");
-      activeProgressRequestId = "";
-      setTimeout(() => hideProgress(), 900);
-      return;
-    }
-    activeProgressRequestId = "";
-    hideProgress();
-    const errorText = message.errorMessage ? `: ${message.errorMessage}` : "";
-    setStatus(`다운로드에 실패했습니다${errorText}`);
-  }
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {

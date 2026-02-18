@@ -194,12 +194,12 @@
             const src = imgEl.getAttribute("src") || "";
             if (!src) continue;
             const absolute = toAbsoluteUrl(src);
-            if (!absolute || !isRoll20AvatarUrl(absolute)) continue;
+            if (!absolute) continue;
 
             messageData.push({ name, src: absolute });
 
             // Only add to pending if we haven't resolved it yet and it looks like a Roll20 URL
-            if (!avatarRedirectCache.has(absolute)) {
+            if (isRoll20AvatarUrl(absolute) && !avatarRedirectCache.has(absolute)) {
                 pendingResolutions.add(absolute);
             }
         }

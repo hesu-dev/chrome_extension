@@ -17,7 +17,7 @@ function normalizeSpeakerName(raw) {
   return String(raw || "").replace(/\s+/g, " ").trim().replace(/:+$/, "").trim();
 }
 
-test("buildReplacementMaps keeps only /users/avatar/ rules and normalizes absolute URLs", () => {
+test("buildReplacementMaps keeps valid image replacements for avatar and non-avatar URLs", () => {
   const maps = buildReplacementMaps(
     [
       {
@@ -34,11 +34,15 @@ test("buildReplacementMaps keeps only /users/avatar/ rules and normalizes absolu
     { toAbsoluteUrl, normalizeSpeakerName }
   );
 
-  assert.equal(maps.byPair.size, 1);
-  assert.equal(maps.byOriginal.size, 1);
+  assert.equal(maps.byPair.size, 2);
+  assert.equal(maps.byOriginal.size, 2);
   assert.equal(
     maps.byPair.get("Alice|||https://app.roll20.net/users/avatar/3307646/30"),
     "https://files.d20.io/images/new-thumb.png?size=30"
+  );
+  assert.equal(
+    maps.byPair.get("Bob|||https://example.com/not-avatar.png"),
+    "https://files.d20.io/images/other.png"
   );
 });
 
@@ -94,4 +98,28 @@ test("buildReplacementMaps ignores non-http image replacement URLs", () => {
 
   assert.equal(maps.byPair.size, 0);
   assert.equal(maps.byOriginal.size, 0);
+});
+
+test("findReplacementForMessage supports non-roll20 original image URL", () => {
+  const maps = buildReplacementMaps(
+    [
+      {
+        name: "Alice",
+        originalUrl: "https://example.com/avatar.png",
+        newUrl: "https://files.d20.io/images/new-avatar.png",
+      },
+    ],
+    { toAbsoluteUrl, normalizeSpeakerName }
+  );
+
+  const replacement = findReplacementForMessage(
+    {
+      name: "Alice",
+      currentSrc: "https://example.com/avatar.png",
+    },
+    maps,
+    { toAbsoluteUrl, normalizeSpeakerName }
+  );
+
+  assert.equal(replacement, "https://files.d20.io/images/new-avatar.png");
 });

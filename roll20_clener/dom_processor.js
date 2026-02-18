@@ -327,6 +327,20 @@
         setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
 
+    function downloadTextFileInPage(text, filenameBase, extension = "txt", mimeType = "text/plain;charset=utf-8") {
+        const ext = String(extension || "txt").replace(/[^a-z0-9]/gi, "").toLowerCase() || "txt";
+        const filename = `${sanitizeFilenameBase(filenameBase)}.${ext}`;
+        const blob = new Blob([String(text || "")], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
     function getAttributesFromElement(node) {
         if (!node || !node.attributes) return [];
         return Array.from(node.attributes).map((attr) => ({ name: attr.name, value: attr.value }));
@@ -412,6 +426,7 @@
         absolutizeResourceUrls,
         stripHeadJsAndCss,
         downloadHtmlInPage,
+        downloadTextFileInPage,
         copyTextToClipboard,
         sanitizeFilenameBase,
         buildLoadedImageUrlMap, // Export this for content.js

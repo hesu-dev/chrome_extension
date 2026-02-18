@@ -16,6 +16,9 @@
 
   const getUtils = () => window.Roll20CleanerUtils || {};
   const getAvatar = () => window.Roll20CleanerAvatar || {};
+  const getAvatarRules = () => window.Roll20CleanerAvatarRules || {};
+  const getChatJson = () => window.Roll20CleanerChatJson || {};
+  const getRoleParser = () => window.Roll20CleanerRoleParser || {};
   const getStyle = () => window.Roll20CleanerStyle || {};
   const getDom = () => window.Roll20CleanerDom || {};
   const getData = () => window.Roll20CleanerData || {};
@@ -520,6 +523,112 @@
     return extractCampaignNameFromHref() || document.title || "roll20-chat";
   }
 
+  function normalizeSpeakerName(raw) {
+    return String(raw || "").replace(/\s+/g, " ").trim().replace(/:+$/, "").trim();
+  }
+
+  function getMessageSpeakerName(messageEl) {
+    const byEl = Array.from(messageEl.children || []).find((child) =>
+      child.matches?.("span.by")
+    );
+    return normalizeSpeakerName(byEl?.textContent || "");
+  }
+
+  function getMessageAvatarImage(messageEl) {
+    const avatarWrap = Array.from(messageEl.children || []).find((child) =>
+      child.classList?.contains("avatar")
+    );
+    if (!avatarWrap) return null;
+    return avatarWrap.querySelector("img");
+  }
+
+  function extractMessageText(messageEl) {
+    const { normalizeMessageText } = getChatJson();
+    const clone = messageEl.cloneNode(true);
+    clone.querySelectorAll?.("span.by, span.tstamp, .avatar").forEach((node) => node.remove());
+    const raw = clone.textContent || "";
+    if (normalizeMessageText) return normalizeMessageText(raw);
+    return String(raw).replace(/\s+/g, " ").trim();
+  }
+
+  function getInlineMessageImageUrl(messageEl) {
+    const { toAbsoluteUrl } = getUtils();
+    const safeToAbsoluteUrl =
+      typeof toAbsoluteUrl === "function" ? toAbsoluteUrl : (value) => String(value || "");
+
+    const clone = messageEl.cloneNode(true);
+    clone.querySelectorAll?.(".avatar, span.by, span.tstamp").forEach((node) => node.remove());
+    const imgEl = clone.querySelector?.("img[src]");
+    if (!imgEl) return null;
+    const src = imgEl.getAttribute("src") || "";
+    const absolute = safeToAbsoluteUrl(src);
+    return absolute || null;
+  }
+
+  function buildAvatarReplacedChatJson(replacements) {
+    const { toAbsoluteUrl } = getUtils();
+    const { buildReplacementMaps, findReplacementForMessage } = getAvatarRules();
+    const { resolveMessageId, buildChatJsonEntry } = getChatJson();
+    const { resolveRoleForMessage } = getRoleParser();
+    const safeToAbsoluteUrl =
+      typeof toAbsoluteUrl === "function" ? toAbsoluteUrl : (value) => String(value || "");
+    const safeResolveMessageId =
+      typeof resolveMessageId === "function"
+        ? resolveMessageId
+        : (message, index) => String(message?.id || index + 1);
+    const safeBuildChatJsonEntry =
+      typeof buildChatJsonEntry === "function"
+        ? buildChatJsonEntry
+        : ({ id, imageUrl, speaker, text }) => ({ id, "이미지 링크": imageUrl, "스피커": speaker, text });
+
+    const maps =
+      typeof buildReplacementMaps === "function"
+        ? buildReplacementMaps(replacements || [], {
+            toAbsoluteUrl: safeToAbsoluteUrl,
+            normalizeSpeakerName,
+          })
+        : { byPair: new Map(), byOriginal: new Map() };
+
+    const messages = Array.from(document.querySelectorAll("div.message"));
+    const rows = messages.map((messageEl, index) => {
+      const speaker = getMessageSpeakerName(messageEl);
+      const avatarImg = getMessageAvatarImage(messageEl);
+      const rawCurrentSrc = avatarImg?.getAttribute("src") || "";
+      const currentSrc = safeToAbsoluteUrl(rawCurrentSrc);
+      const replacement =
+        typeof findReplacementForMessage === "function"
+          ? findReplacementForMessage(
+              { name: speaker, currentSrc },
+              maps,
+              { toAbsoluteUrl: safeToAbsoluteUrl, normalizeSpeakerName }
+            )
+          : "";
+      const imageUrl = replacement || currentSrc;
+      const role =
+        typeof resolveRoleForMessage === "function"
+          ? resolveRoleForMessage(messageEl)
+          : "character";
+      const inlineImageUrl = getInlineMessageImageUrl(messageEl);
+      const messageId =
+        messageEl.getAttribute("data-messageid") ||
+        messageEl.id ||
+        messageEl.getAttribute("id") ||
+        "";
+
+      return safeBuildChatJsonEntry({
+        id: safeResolveMessageId({ id: messageId }, index),
+        speaker,
+        role,
+        text: extractMessageText(messageEl),
+        imageUrl: inlineImageUrl,
+        speakerImageUrl: imageUrl || null,
+        nameColor: null,
+      });
+    });
+
+    return JSON.stringify(rows, null, 2);
+  }
+
   // --- Initialization ---
 
   chrome.storage.sync.get(
@@ -631,7 +740,7 @@
       return;
     }
 
-    const { downloadHtmlInPage, buildLoadedImageUrlMap, copyTextToClipboard } = getDom();
+    const { downloadHtmlInPage, buildLoadedImageUrlMap, copyTextToClipboard, downloadTextFileInPage } = getDom();
     const { collectAvatarMappingsFromRoot } = getAvatar();
 
     if (message?.type === "GET_VISIBLE_HTML") {
@@ -722,7 +831,7 @@
       return true;
     }
 
-    if (message?.type === "DOWNLOAD_WITH_AVATAR_REPLACEMENTS") {
+    if (message?.type === "DOWNLOAD_WITH_AVATAR_REPLACEMENTS" || message?.type === "DOWNLOAD_WITH_AVATAR_REPLACEMENTS_HTML") {
       buildVisibleHtmlWithAvatarReplacements(message?.replacements || {})
         .then((html) => {
           if (downloadHtmlInPage) downloadHtmlInPage(html, getDownloadNameBase());
@@ -732,6 +841,23 @@
           console.error(e);
           sendResponse({ ok: false });
         });
+      return true;
+    }
+
+    if (message?.type === "DOWNLOAD_WITH_AVATAR_REPLACEMENTS_JSON") {
+      try {
+        const jsonText = buildAvatarReplacedChatJson(message?.replacements || []);
+        if (downloadTextFileInPage) {
+          downloadTextFileInPage(jsonText, getDownloadNameBase(), "json", "application/json;charset=utf-8");
+        }
+        sendResponse({ ok: true });
+      } catch (error) {
+        console.error(error);
+        sendResponse({
+          ok: false,
+          errorMessage: error?.message ? String(error.message) : "JSON 생성 중 오류가 발생했습니다.",
+        });
+      }
       return true;
     }
   });

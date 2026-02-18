@@ -35,6 +35,8 @@
         "avatar_rules.js",
         "html_chunk_serializer.js",
         "avatar_processor.js",
+        "chat_json_export.js",
+        "chat_role_parser.js",
         "style_processor.js",
         "dom_processor.js",
         "root_state.js",
