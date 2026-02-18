@@ -8,7 +8,7 @@
     "default_title": "Roll20 채팅 정리 도구"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "js/background/background.js"
   },
   "permissions": [
     "storage",
@@ -30,17 +30,17 @@
         "https://roll20.net/*"
       ],
       "js": [
-        "utils.js",
-        "performance_utils.js",
-        "avatar_rules.js",
-        "html_chunk_serializer.js",
-        "avatar_processor.js",
-        "chat_json_export.js",
-        "chat_role_parser.js",
-        "style_processor.js",
-        "dom_processor.js",
-        "root_state.js",
-        "content.js"
+        "js/shared/utils.js",
+        "js/shared/performance_utils.js",
+        "js/content/avatar/avatar_rules.js",
+        "js/content/export/html_chunk_serializer.js",
+        "js/content/avatar/avatar_processor.js",
+        "js/content/export/chat_json_export.js",
+        "js/content/export/chat_role_parser.js",
+        "js/content/dom/style_processor.js",
+        "js/content/dom/dom_processor.js",
+        "js/content/dom/root_state.js",
+        "js/content/core/content.js"
       ],
       "run_at": "document_idle"
     }

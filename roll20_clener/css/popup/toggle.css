@@ -1,0 +1,68 @@
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-ui {
+  position: relative;
+  width: 48px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid #1f1f1f;
+  background: #b6b6b6;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.toggle-ui::before {
+  content: "OFF";
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.toggle-ui::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #111;
+}
+
+.toggle input[type="checkbox"]:checked + .toggle-ui {
+  background: #000000;
+}
+
+.toggle input[type="checkbox"]:checked + .toggle-ui::before {
+  content: "ON";
+  left: 4px;
+  right: auto;
+  color: #ffffff;
+}
+
+.toggle input[type="checkbox"]:checked + .toggle-ui::after {
+  left: 30px;
+  background: #ffffff;
+}
+
+.toggle-text {
+  display: inline-block;
+  margin-top: 4px;
+}
