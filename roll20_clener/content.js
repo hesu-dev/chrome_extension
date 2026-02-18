@@ -19,6 +19,7 @@
   const getStyle = () => window.Roll20CleanerStyle || {};
   const getDom = () => window.Roll20CleanerDom || {};
   const getData = () => window.Roll20CleanerData || {};
+  const getRootState = () => window.Roll20CleanerRootState || {};
   const getPerf = () => window.Roll20CleanerPerf || {};
 
   const TEST_HTML_BASE_BYTES = 13045405;
@@ -78,14 +79,22 @@
     return match?.[1]?.trim() || "";
   }
 
+  function isRootClassDesired() {
+    const { computeRootClassDesired } = getRootState();
+    if (computeRootClassDesired) return computeRootClassDesired(settings);
+    return settings.colorFilterEnabled || settings.hiddenTextEnabled;
+  }
+
   function updateRootState() {
     const { ROOT_CLASS } = getData();
     if (!ROOT_CLASS) return;
-
-    document.documentElement.classList.toggle(
-      ROOT_CLASS,
-      settings.colorFilterEnabled || settings.hiddenTextEnabled
-    );
+    const desired = isRootClassDesired();
+    const { syncRootClass } = getRootState();
+    if (syncRootClass) {
+      syncRootClass(document.documentElement.classList, ROOT_CLASS, desired);
+      return;
+    }
+    document.documentElement.classList.toggle(ROOT_CLASS, desired);
   }
 
   function markHidden(el, reasonAttr) {
@@ -248,6 +257,23 @@
     updateRootState();
     applyFilters(document.documentElement);
   }
+
+  const scheduleRootStateSync = (() => {
+    const { createCoalescedScheduler } = getRootState();
+    if (createCoalescedScheduler) {
+      return createCoalescedScheduler(() => updateRootState());
+    }
+
+    let scheduled = false;
+    return () => {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(() => {
+        scheduled = false;
+        updateRootState();
+      }, 0);
+    };
+  })();
 
   // --- Main Build Functions ---
 
@@ -442,6 +468,33 @@
     subtree: true,
   });
 
+  const rootClassObserver = new MutationObserver((mutations) => {
+    const rootEl = document.documentElement;
+    const { shouldResyncOnMutations } = getRootState();
+    if (shouldResyncOnMutations) {
+      if (shouldResyncOnMutations(mutations, rootEl)) {
+        scheduleRootStateSync();
+      }
+      return;
+    }
+
+    const hasRootClassMutation = mutations.some(
+      (mutation) =>
+        mutation?.type === "attributes" &&
+        mutation?.attributeName === "class" &&
+        mutation?.target === rootEl
+    );
+
+    if (hasRootClassMutation) {
+      scheduleRootStateSync();
+    }
+  });
+
+  rootClassObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+
   // --- Message Handling ---
 
   async function buildBundledHtml(requestId) {
@@ -486,6 +539,20 @@
 
     if (message?.type === "ROLL20_CLEANER_STREAM_READY") {
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message?.type === "ROLL20_CLEANER_GET_ROOT_STATE") {
+      const { ROOT_CLASS } = getData();
+      const desiredRootClassEnabled = isRootClassDesired();
+      const rootClassApplied = ROOT_CLASS
+        ? document.documentElement.classList.contains(ROOT_CLASS)
+        : false;
+      sendResponse({
+        ok: true,
+        desiredRootClassEnabled,
+        rootClassApplied,
+      });
       return;
     }
 

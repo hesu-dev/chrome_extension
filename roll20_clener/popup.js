@@ -11,6 +11,7 @@ const progressWrapEl = document.getElementById("progressWrap");
 const progressBarEl = document.getElementById("progressBar");
 const progressTextEl = document.getElementById("progressText");
 const statusEl = document.getElementById("status");
+const settingApply = window.Roll20CleanerSettingApply || {};
 
 let activeProgressRequestId = "";
 let currentAvatarMappings = [];
@@ -116,6 +117,7 @@ function injectContentScript(tabId) {
           "avatar_processor.js",
           "style_processor.js",
           "dom_processor.js",
+          "root_state.js",
           "content.js"
         ],
       },
@@ -152,6 +154,57 @@ async function getValidatedActiveTabId() {
     throw new Error("현재 탭에서는 동작할 수 없습니다. Roll20 웹페이지 탭에서 실행해주세요.");
   }
   return tab.id;
+}
+
+async function updateInitialReadyStatus() {
+  try {
+    const tab = await getActiveTab();
+    if (!tab?.id || !isSupportedTabUrl(tab.url || "")) {
+      setStatus("Roll20 탭에서 확장 프로그램을 실행하세요.");
+      return;
+    }
+
+    const response = await requestToTab(tab.id, "ROLL20_CLEANER_PING", {}, 1500).catch(() => null);
+    if (response?.ok) {
+      setStatus("준비되었습니다.");
+      return;
+    }
+
+    setStatus("페이지 로딩 중입니다. 잠시 후 다시 시도하세요.");
+  } catch (error) {
+    setStatus("상태 확인에 실패했습니다. 다시 시도해주세요.");
+  }
+}
+
+function setSyncStorage(values) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.set(values, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function waitForRootClassApplied(tabId, expectedEnabled, timeoutMs = 6000) {
+  const isApplied = settingApply.isRootClassApplied
+    ? settingApply.isRootClassApplied
+    : (response, expected) =>
+        !!response?.ok &&
+        response.rootClassApplied === expected &&
+        response.desiredRootClassEnabled === expected;
+
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const response = await requestWithRecovery(tabId, "ROLL20_CLEANER_GET_ROOT_STATE", {});
+    if (isApplied(response, expectedEnabled)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  throw new Error("설정 반영 확인 시간이 초과되었습니다.");
 }
 
 async function runHtmlAction({
@@ -337,26 +390,67 @@ chrome.storage.sync.get(
     colorFilterEnabledEl.checked = colorFilterEnabled;
     hiddenTextEnabledEl.checked = hiddenTextEnabled;
     targetColorEl.value = targetColor;
-    setStatus("준비되었습니다.");
+    updateInitialReadyStatus();
   }
 );
 
-function persist() {
-  chrome.storage.sync.set(
-    {
-      colorFilterEnabled: colorFilterEnabledEl.checked,
-      hiddenTextEnabled: hiddenTextEnabledEl.checked,
-      targetColor: targetColorEl.value.trim(),
-    },
-    () => setStatus("설정이 저장되었습니다.")
-  );
+function collectSettingValues() {
+  return {
+    colorFilterEnabled: colorFilterEnabledEl.checked,
+    hiddenTextEnabled: hiddenTextEnabledEl.checked,
+    targetColor: targetColorEl.value.trim(),
+  };
 }
 
-colorFilterEnabledEl.addEventListener("change", persist);
-hiddenTextEnabledEl.addEventListener("change", persist);
-targetColorEl.addEventListener("change", persist);
+async function persistTextSetting() {
+  try {
+    await setSyncStorage(collectSettingValues());
+    setStatus("설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.");
+  } catch (error) {
+    setStatus(`설정 저장에 실패했습니다: ${normalizeUiError(error)}`);
+  }
+}
+
+async function persistFilterSettingWithApplyState() {
+  let saved = false;
+  try {
+    const values = collectSettingValues();
+    const expectedEnabled = settingApply.computeExpectedRootClassEnabled
+      ? settingApply.computeExpectedRootClassEnabled(values)
+      : !!(values.colorFilterEnabled || values.hiddenTextEnabled);
+
+    setStatus("적용중입니다...");
+    setProgress(20, "설정을 저장 중입니다...");
+    await setSyncStorage(values);
+    saved = true;
+
+    const tabId = await getValidatedActiveTabId();
+    setProgress(65, "DOM 반영 상태를 확인 중입니다...");
+    await waitForRootClassApplied(tabId, expectedEnabled);
+
+    setProgress(100, "설정 적용이 완료되었습니다.");
+    setStatus("설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.");
+    setTimeout(() => hideProgress(), 800);
+  } catch (error) {
+    hideProgress();
+    if (saved) {
+      const message = String(error?.message || "");
+      if (/message port closed before a response was received/i.test(message)) {
+        setStatus("설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.");
+        return;
+      }
+      setStatus(`설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.`);
+      return;
+    }
+    setStatus(`설정 저장에 실패했습니다: ${normalizeUiError(error)}`);
+  }
+}
+
+colorFilterEnabledEl.addEventListener("change", persistFilterSettingWithApplyState);
+hiddenTextEnabledEl.addEventListener("change", persistFilterSettingWithApplyState);
+targetColorEl.addEventListener("change", persistTextSetting);
 targetColorEl.addEventListener("keyup", (event) => {
-  if (event.key === "Enter") persist();
+  if (event.key === "Enter") persistTextSetting();
 });
 
 downloadBundlePageEl.addEventListener("click", async () => {
