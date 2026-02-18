@@ -21,8 +21,8 @@ const pendingSettingApplyRequests = new Map();
 let readyStatusProbeTimerId = null;
 const inputLockReasons = new Set();
 
-const READY_STATUS_LOADING_TEXT = "페이지 로딩 중입니다. 잠시 후 다시 시도하세요.";
-const READY_STATUS_READY_TEXT = "준비되었습니다.";
+const READY_STATUS_LOADING_TEXT = "설정 적용 중입니다. 로딩이 끝난 이후 사용해주세요.";
+const READY_STATUS_READY_TEXT = "준비 되었습니다.";
 const READY_STATUS_PROBE_INTERVAL_MS = 1200;
 
 function setStatus(text) {

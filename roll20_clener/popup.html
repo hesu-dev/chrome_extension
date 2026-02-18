@@ -17,7 +17,7 @@
     <section class="card">
       <label class="field">
         <span class="label">숨길 사담의 스타일을 입력해주세요.<br />규모가 큰 파일일 경우에는 시간이 소요될 수 있습니다.</span>
-        <input id="targetColor" class="text-input" type="text" placeholder="color=#aaaaaa" />
+        <input id="targetColor" class="text-input" type="text" placeholder="color: #aaaaaa" />
       </label>
       <label class="toggle">
         <input id="colorFilterEnabled" type="checkbox" />
@@ -40,12 +40,12 @@
       </button>
       <section id="avatarEditor" class="avatar-editor hidden">
         <div class="avatar-editor-header">
-          <strong>이름/아바타 매핑</strong>
-          <small>새 이미지 링크를 넣으면 해당 이름의 아바타를 모두 변경합니다.</small>
+          <strong>이미지 링크 교체</strong>
+          <small>해당 이름의 이미지 링크를 수정하면 이미지가 모두 변경됩니다 .</small>
         </div>
         <div id="avatarList" class="avatar-list"></div>
         <button id="downloadAvatarMapped" class="btn btn-quaternary" type="button">
-          프로필 이미지 교체
+          교체한 링크로 다운로드
         </button>
       </section>
       <div id="progressWrap" class="progress-wrap hidden" aria-live="polite">

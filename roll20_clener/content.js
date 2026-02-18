@@ -391,7 +391,8 @@
     const start = performance.now();
     const clone = document.documentElement.cloneNode(true);
     const estimatedNodes = estimateElementCount ? estimateElementCount(document.documentElement) : 0;
-    report(5, `DOM 준비 중 (${estimatedNodes.toLocaleString()} 노드 추정)`);
+    // report(5, `DOM 준비 중 (${estimatedNodes.toLocaleString()} 노드 추정)`);
+    report(5, `복사 준비 중...`);
 
     if (processVisibleNodesBatched) {
       await processVisibleNodesBatched(document.documentElement, clone, {
@@ -402,7 +403,8 @@
           if (!reportProgress) return;
           const ratio = total ? Math.min(1, processedNodes / total) : 0;
           const percent = 10 + Math.floor(ratio * 40);
-          report(percent, `DOM 처리 중 (${processedNodes.toLocaleString()}/${total.toLocaleString()})`);
+          // report(percent, `DOM 처리 중 (${processedNodes.toLocaleString()}/${total.toLocaleString()})`);
+           report(percent, `설정 파일 체크 중..`);
         },
       });
     } else if (processVisibleNodes) {
@@ -410,7 +412,8 @@
         styleMode: "balanced",
         estimatedNodes,
       });
-      report(50, "DOM 처리 완료");
+      // report(50, "DOM 처리 완료");
+       report(50, "HTML에 설정 적용 중..");
     } else {
       throw new Error("Roll20CleanerDom.processVisibleNodes is missing!");
     }
@@ -432,7 +435,7 @@
       stripHeadJsAndCss(clone);
     }
 
-    report(90, "HTML 직렬화 중...");
+    report(90, "HTML 파일 준비 중...");
     const serializer = new XMLSerializer();
     const html = appendDoctypeIfNeeded(serializer.serializeToString(clone));
     const bytes = perf.getUtf8ByteLength ? perf.getUtf8ByteLength(html) : new TextEncoder().encode(html).length;
@@ -745,14 +748,14 @@
           type: "STREAM_PROGRESS",
           requestId,
           percent: 10,
-          label: "DOM 스냅샷 복제 중...",
+          label: "내용 복제 중입니다...",
         });
         const chunks = buildProfileImageReplacementChunks(message?.replacements || []);
         port.postMessage({
           type: "STREAM_PROGRESS",
           requestId,
           percent: 80,
-          label: "청크 다운로드 준비 중...",
+          label: "다운로드 준비 중입니다...",
         });
         if (getDom().downloadHtmlChunksInPage) {
           getDom().downloadHtmlChunksInPage(chunks, getDownloadNameBase());
