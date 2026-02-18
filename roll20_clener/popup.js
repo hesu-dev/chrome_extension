@@ -11,10 +11,12 @@ const progressWrapEl = document.getElementById("progressWrap");
 const progressBarEl = document.getElementById("progressBar");
 const progressTextEl = document.getElementById("progressText");
 const statusEl = document.getElementById("status");
-const settingApply = window.Roll20CleanerSettingApply || {};
+const applyFeedback = window.Roll20CleanerFilterApplyFeedback || {};
 
 let activeProgressRequestId = "";
+let activeSettingApplyRequestId = "";
 let currentAvatarMappings = [];
+const pendingSettingApplyRequests = new Map();
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -188,23 +190,61 @@ function setSyncStorage(values) {
   });
 }
 
-async function waitForRootClassApplied(tabId, expectedEnabled, timeoutMs = 6000) {
-  const isApplied = settingApply.isRootClassApplied
-    ? settingApply.isRootClassApplied
-    : (response, expected) =>
-        !!response?.ok &&
-        response.rootClassApplied === expected &&
-        response.desiredRootClassEnabled === expected;
-
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const response = await requestWithRecovery(tabId, "ROLL20_CLEANER_GET_ROOT_STATE", {});
-    if (isApplied(response, expectedEnabled)) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 120));
+function getSavedStatusMessage() {
+  if (applyFeedback.getSavedStatusMessage) {
+    return applyFeedback.getSavedStatusMessage();
   }
-  throw new Error("설정 반영 확인 시간이 초과되었습니다.");
+  return "설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.";
+}
+
+function isNonFatalApplyDispatchError(error) {
+  const message = String(error?.message || error || "");
+  if (applyFeedback.isNonFatalApplyDispatchError) {
+    return applyFeedback.isNonFatalApplyDispatchError(message);
+  }
+  return /message port closed before a response was received|receiving end does not exist|cannot access contents of url|no tab with id|tab was closed/i.test(
+    message
+  );
+}
+
+function toSettingApplyProgressPercent(processed, total) {
+  if (applyFeedback.toApplyProgressPercent) {
+    return applyFeedback.toApplyProgressPercent(processed, total);
+  }
+  const ratio = Math.min(1, (Number(processed) || 0) / Math.max(1, Number(total) || 1));
+  return 15 + Math.floor(ratio * 80);
+}
+
+function clearPendingSettingApply(reason = "취소되었습니다.") {
+  if (!activeSettingApplyRequestId) return;
+  const pending = pendingSettingApplyRequests.get(activeSettingApplyRequestId);
+  if (pending) {
+    pending.reject(new Error(reason));
+    pendingSettingApplyRequests.delete(activeSettingApplyRequestId);
+  }
+  activeSettingApplyRequestId = "";
+}
+
+function waitForSettingApplyDone(requestId, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      pendingSettingApplyRequests.delete(requestId);
+      reject(new Error("설정 반영 확인 시간이 초과되었습니다."));
+    }, timeoutMs);
+
+    pendingSettingApplyRequests.set(requestId, {
+      resolve: () => {
+        clearTimeout(timeoutId);
+        pendingSettingApplyRequests.delete(requestId);
+        resolve();
+      },
+      reject: (error) => {
+        clearTimeout(timeoutId);
+        pendingSettingApplyRequests.delete(requestId);
+        reject(error);
+      },
+    });
+  });
 }
 
 async function runHtmlAction({
@@ -405,44 +445,66 @@ function collectSettingValues() {
 async function persistTextSetting() {
   try {
     await setSyncStorage(collectSettingValues());
-    setStatus("설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.");
+    setStatus(getSavedStatusMessage());
   } catch (error) {
     setStatus(`설정 저장에 실패했습니다: ${normalizeUiError(error)}`);
   }
 }
 
 async function persistFilterSettingWithApplyState() {
+  clearPendingSettingApply();
   let saved = false;
   try {
-    const values = collectSettingValues();
-    const expectedEnabled = settingApply.computeExpectedRootClassEnabled
-      ? settingApply.computeExpectedRootClassEnabled(values)
-      : !!(values.colorFilterEnabled || values.hiddenTextEnabled);
-
     setStatus("적용중입니다...");
     setProgress(20, "설정을 저장 중입니다...");
-    await setSyncStorage(values);
+    await setSyncStorage(collectSettingValues());
     saved = true;
 
+    setStatus("설정은 저장되었습니다. 화면에 반영 중입니다...");
+    setProgress(35, "현재 탭 반영을 시작합니다...");
+
     const tabId = await getValidatedActiveTabId();
-    setProgress(65, "DOM 반영 상태를 확인 중입니다...");
-    await waitForRootClassApplied(tabId, expectedEnabled);
+    const requestId = randomRequestId();
+    activeSettingApplyRequestId = requestId;
+
+    const applyResponse = await requestWithRecovery(tabId, "ROLL20_CLEANER_APPLY_FILTERS", {
+      requestId,
+    });
+
+    if (!applyResponse?.ok) {
+      throw new Error(applyResponse?.errorMessage || "탭 반영 요청에 실패했습니다.");
+    }
+
+    if (!applyResponse?.accepted) {
+      setStatus(getSavedStatusMessage());
+      hideProgress();
+      activeSettingApplyRequestId = "";
+      return;
+    }
+
+    await waitForSettingApplyDone(requestId);
 
     setProgress(100, "설정 적용이 완료되었습니다.");
-    setStatus("설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.");
+    setStatus(getSavedStatusMessage());
     setTimeout(() => hideProgress(), 800);
+    activeSettingApplyRequestId = "";
   } catch (error) {
     hideProgress();
     if (saved) {
-      const message = String(error?.message || "");
-      if (/message port closed before a response was received/i.test(message)) {
-        setStatus("설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.");
-        return;
-      }
-      setStatus(`설정은 저장되었습니다. 반영되었으니 화면을 확인해주세요.`);
+      setStatus(getSavedStatusMessage());
+      activeSettingApplyRequestId = "";
+      return;
+    }
+    if (isNonFatalApplyDispatchError(error)) {
+      setStatus(getSavedStatusMessage());
+      activeSettingApplyRequestId = "";
+      return;
+    }
+    if (/취소되었습니다/.test(String(error?.message || ""))) {
       return;
     }
     setStatus(`설정 저장에 실패했습니다: ${normalizeUiError(error)}`);
+    activeSettingApplyRequestId = "";
   }
 }
 
@@ -537,6 +599,25 @@ downloadAvatarMappedEl.addEventListener("click", async () => {
 });
 
 chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "FILTER_APPLY_PROGRESS") {
+    if (!message.requestId || message.requestId !== activeSettingApplyRequestId) return;
+    const percent = toSettingApplyProgressPercent(message.processed, message.total);
+    setProgress(percent, message.label || "화면 반영 중입니다...");
+    return;
+  }
+
+  if (message?.type === "FILTER_APPLY_DONE") {
+    if (!message.requestId || message.requestId !== activeSettingApplyRequestId) return;
+    const pending = pendingSettingApplyRequests.get(message.requestId);
+    if (!pending) return;
+    if (message.ok) {
+      pending.resolve();
+      return;
+    }
+    pending.reject(new Error(message.errorMessage || "설정 반영 중 오류가 발생했습니다."));
+    return;
+  }
+
   if (message?.type === "BUNDLE_PROGRESS") {
     if (!message.requestId || message.requestId !== activeProgressRequestId) return;
     setProgress(message.percent ?? 0, message.label || "처리 중...");
@@ -556,5 +637,18 @@ chrome.runtime.onMessage.addListener((message) => {
     hideProgress();
     const errorText = message.errorMessage ? `: ${message.errorMessage}` : "";
     setStatus(`다운로드에 실패했습니다${errorText}`);
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "sync") return;
+  if (changes.colorFilterEnabled) {
+    colorFilterEnabledEl.checked = !!changes.colorFilterEnabled.newValue;
+  }
+  if (changes.hiddenTextEnabled) {
+    hiddenTextEnabledEl.checked = !!changes.hiddenTextEnabled.newValue;
+  }
+  if (changes.targetColor) {
+    targetColorEl.value = String(changes.targetColor.newValue || "");
   }
 });

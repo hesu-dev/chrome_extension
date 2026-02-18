@@ -187,66 +187,145 @@
     return false;
   }
 
-  function applyColorFilter(root) {
-    const { MESSAGE_SELECTOR, COLOR_HIDE_ATTR } = getData();
-    if (!MESSAGE_SELECTOR) return;
+  function isDocumentRoot(rootEl) {
+    return rootEl === document.documentElement;
+  }
 
-    const rootEl = root.nodeType === 1 ? root : document.documentElement;
-    const candidates = rootEl.matches?.(MESSAGE_SELECTOR) ? [rootEl] : [];
-    const messages = rootEl.querySelectorAll
-      ? rootEl.querySelectorAll(MESSAGE_SELECTOR)
-      : [];
-    candidates.push(...messages);
+  function collectMessages(root) {
+    const { MESSAGE_SELECTOR } = getData();
+    if (!MESSAGE_SELECTOR) return [];
 
-    candidates.forEach((messageEl) => {
-      if (!settings.colorFilterEnabled || !settings.styleQuery) {
-        unmarkHidden(messageEl, COLOR_HIDE_ATTR);
-        return;
-      }
-      if (hasMatchingStyleInMessage(messageEl)) {
-        markHidden(messageEl, COLOR_HIDE_ATTR);
-      } else {
-        unmarkHidden(messageEl, COLOR_HIDE_ATTR);
+    const rootEl = root?.nodeType === 1 ? root : document.documentElement;
+    const messages = [];
+    if (rootEl.matches?.(MESSAGE_SELECTOR)) {
+      messages.push(rootEl);
+    }
+    if (rootEl.querySelectorAll) {
+      messages.push(...rootEl.querySelectorAll(MESSAGE_SELECTOR));
+    }
+    return messages;
+  }
+
+  function cleanupStaleTextHiddenNodesIfNeeded(rootEl) {
+    const { MESSAGE_SELECTOR, TEXT_HIDE_ATTR } = getData();
+    if (!isDocumentRoot(rootEl)) return;
+    const stale = document.querySelectorAll(`[${TEXT_HIDE_ATTR}]`);
+    stale.forEach((el) => {
+      if (!el.matches?.(MESSAGE_SELECTOR)) {
+        unmarkHidden(el, TEXT_HIDE_ATTR);
       }
     });
   }
 
-  function applyHiddenTextFilter(root) {
-    const { MESSAGE_SELECTOR, TEXT_HIDE_ATTR, HIDDEN_TEXT } = getData();
-    if (!MESSAGE_SELECTOR) return;
-
-    const rootEl = root.nodeType === 1 ? root : document.documentElement;
-    const messages = rootEl.matches?.(MESSAGE_SELECTOR) ? [rootEl] : [];
-    const messageNodes = rootEl.querySelectorAll
-      ? rootEl.querySelectorAll(MESSAGE_SELECTOR)
-      : [];
-    messages.push(...messageNodes);
-
-    if (rootEl === document.documentElement) {
-      const stale = document.querySelectorAll(`[${TEXT_HIDE_ATTR}]`);
-      stale.forEach((el) => {
-        if (!el.matches?.(MESSAGE_SELECTOR)) {
-          unmarkHidden(el, TEXT_HIDE_ATTR);
-        }
-      });
+  function applyColorFilterToMessage(messageEl) {
+    const { COLOR_HIDE_ATTR } = getData();
+    if (!settings.colorFilterEnabled || !settings.styleQuery) {
+      unmarkHidden(messageEl, COLOR_HIDE_ATTR);
+      return;
     }
+    if (hasMatchingStyleInMessage(messageEl)) {
+      markHidden(messageEl, COLOR_HIDE_ATTR);
+      return;
+    }
+    unmarkHidden(messageEl, COLOR_HIDE_ATTR);
+  }
 
+  function applyHiddenTextFilterToMessage(messageEl) {
+    const { TEXT_HIDE_ATTR, HIDDEN_TEXT } = getData();
+    if (!settings.hiddenTextEnabled) {
+      unmarkHidden(messageEl, TEXT_HIDE_ATTR);
+      return;
+    }
+    if (messageEl.textContent?.includes(HIDDEN_TEXT)) {
+      markHidden(messageEl, TEXT_HIDE_ATTR);
+      return;
+    }
+    unmarkHidden(messageEl, TEXT_HIDE_ATTR);
+  }
+
+  function applyFiltersToMessages(messages) {
     messages.forEach((messageEl) => {
-      if (!settings.hiddenTextEnabled) {
-        unmarkHidden(messageEl, TEXT_HIDE_ATTR);
-        return;
-      }
-      if (messageEl.textContent?.includes(HIDDEN_TEXT)) {
-        markHidden(messageEl, TEXT_HIDE_ATTR);
-      } else {
-        unmarkHidden(messageEl, TEXT_HIDE_ATTR);
-      }
+      applyColorFilterToMessage(messageEl);
+      applyHiddenTextFilterToMessage(messageEl);
     });
   }
 
   function applyFilters(root) {
-    applyColorFilter(root);
-    applyHiddenTextFilter(root);
+    const rootEl = root?.nodeType === 1 ? root : document.documentElement;
+    cleanupStaleTextHiddenNodesIfNeeded(rootEl);
+    const messages = collectMessages(rootEl);
+    applyFiltersToMessages(messages);
+  }
+
+  async function applyFiltersBatched(root, options = {}) {
+    const rootEl = root?.nodeType === 1 ? root : document.documentElement;
+    cleanupStaleTextHiddenNodesIfNeeded(rootEl);
+    const messages = collectMessages(rootEl);
+    const chunkSize = Math.max(100, Number(options.chunkSize) || 300);
+    const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+    const shouldContinue =
+      typeof options.shouldContinue === "function" ? options.shouldContinue : () => true;
+
+    for (let i = 0; i < messages.length; i += chunkSize) {
+      if (!shouldContinue()) return { canceled: true, total: messages.length, processed: i };
+      const slice = messages.slice(i, i + chunkSize);
+      applyFiltersToMessages(slice);
+      if (onProgress) {
+        onProgress({
+          processed: Math.min(messages.length, i + slice.length),
+          total: messages.length,
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    if (onProgress) {
+      onProgress({ processed: messages.length, total: messages.length });
+    }
+    return { canceled: false, total: messages.length, processed: messages.length };
+  }
+
+  let fullApplyRunToken = 0;
+  async function runFullFilterApply({ requestId = "", reportProgress = false } = {}) {
+    const runToken = ++fullApplyRunToken;
+    const sendProgress = (processed, total) => {
+      if (!reportProgress || !requestId) return;
+      chrome.runtime.sendMessage({
+        type: "FILTER_APPLY_PROGRESS",
+        requestId,
+        processed,
+        total,
+        label: `화면 반영 중... (${processed.toLocaleString()}/${Math.max(
+          1,
+          total
+        ).toLocaleString()})`,
+      });
+    };
+
+    try {
+      await applyFiltersBatched(document.documentElement, {
+        chunkSize: 300,
+        shouldContinue: () => runToken === fullApplyRunToken,
+        onProgress: ({ processed, total }) => sendProgress(processed, total),
+      });
+
+      if (reportProgress && requestId && runToken === fullApplyRunToken) {
+        chrome.runtime.sendMessage({
+          type: "FILTER_APPLY_DONE",
+          requestId,
+          ok: true,
+        });
+      }
+    } catch (error) {
+      if (reportProgress && requestId) {
+        chrome.runtime.sendMessage({
+          type: "FILTER_APPLY_DONE",
+          requestId,
+          ok: false,
+          errorMessage: error?.message ? String(error.message) : "화면 반영 중 오류가 발생했습니다.",
+        });
+      }
+    }
   }
 
   function refreshSettings(next) {
@@ -255,7 +334,7 @@
     settings.targetColor = next.targetColor;
     settings.styleQuery = parseStyleQuery(settings.targetColor);
     updateRootState();
-    applyFilters(document.documentElement);
+    runFullFilterApply({ reportProgress: false });
   }
 
   const scheduleRootStateSync = (() => {
@@ -542,17 +621,10 @@
       return;
     }
 
-    if (message?.type === "ROLL20_CLEANER_GET_ROOT_STATE") {
-      const { ROOT_CLASS } = getData();
-      const desiredRootClassEnabled = isRootClassDesired();
-      const rootClassApplied = ROOT_CLASS
-        ? document.documentElement.classList.contains(ROOT_CLASS)
-        : false;
-      sendResponse({
-        ok: true,
-        desiredRootClassEnabled,
-        rootClassApplied,
-      });
+    if (message?.type === "ROLL20_CLEANER_APPLY_FILTERS") {
+      const requestId = message?.requestId || "";
+      sendResponse({ ok: true, accepted: true, requestId });
+      runFullFilterApply({ requestId, reportProgress: !!requestId });
       return;
     }
 
