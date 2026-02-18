@@ -18,6 +18,7 @@
   const getAvatar = () => window.Roll20CleanerAvatar || {};
   const getAvatarRules = () => window.Roll20CleanerAvatarRules || {};
   const getChatJson = () => window.Roll20CleanerChatJson || {};
+  const getMessageContext = () => window.Roll20CleanerMessageContext || {};
   const getRoleParser = () => window.Roll20CleanerRoleParser || {};
   const getStyle = () => window.Roll20CleanerStyle || {};
   const getDom = () => window.Roll20CleanerDom || {};
@@ -423,6 +424,7 @@
 
     removeSheetTemplateAreaNewlines(clone);
     removeNonSingleFileAttrs(clone);
+    repeatCollapsedMessageMeta(clone);
     report(60, "리소스 정리 중...");
 
     if (withAvatarReplacements && applyAvatarReplacementsToClone) {
@@ -485,6 +487,7 @@
     const { applyAvatarReplacementsToClone } = getAvatar();
     const { serializeDocumentCloneToChunks } = getDom();
     const clone = document.documentElement.cloneNode(true);
+    repeatCollapsedMessageMeta(clone);
     if (applyAvatarReplacementsToClone) {
       applyAvatarReplacementsToClone(clone, replacements);
     }
@@ -542,6 +545,51 @@
     return avatarWrap.querySelector("img");
   }
 
+  function getDirectMessageChildByClass(messageEl, className) {
+    return Array.from(messageEl.children || []).find((child) =>
+      child.classList?.contains(className)
+    );
+  }
+
+  function getDirectMessageChildBySelector(messageEl, selector) {
+    return Array.from(messageEl.children || []).find((child) => child.matches?.(selector));
+  }
+
+  function repeatCollapsedMessageMeta(rootEl) {
+    const messages = Array.from(rootEl.querySelectorAll("div.message"));
+    let prevSpacer = null;
+    let prevAvatar = null;
+    let prevBy = null;
+
+    messages.forEach((messageEl) => {
+      let spacerEl = getDirectMessageChildByClass(messageEl, "spacer");
+      let avatarEl = getDirectMessageChildByClass(messageEl, "avatar");
+      let byEl = getDirectMessageChildBySelector(messageEl, "span.by");
+
+      if (!spacerEl && prevSpacer) {
+        spacerEl = prevSpacer.cloneNode(true);
+        messageEl.insertBefore(spacerEl, messageEl.firstChild || null);
+      }
+
+      if (!avatarEl && prevAvatar) {
+        avatarEl = prevAvatar.cloneNode(true);
+        const anchor = spacerEl?.nextSibling || messageEl.firstChild || null;
+        messageEl.insertBefore(avatarEl, anchor);
+      }
+
+      if (!byEl && prevBy) {
+        byEl = prevBy.cloneNode(true);
+        const tstampEl = getDirectMessageChildBySelector(messageEl, "span.tstamp");
+        const anchor = tstampEl?.nextSibling || avatarEl?.nextSibling || messageEl.firstChild || null;
+        messageEl.insertBefore(byEl, anchor);
+      }
+
+      prevSpacer = spacerEl || prevSpacer;
+      prevAvatar = avatarEl || prevAvatar;
+      prevBy = byEl || prevBy;
+    });
+  }
+
   function extractMessageText(messageEl) {
     const { normalizeMessageText } = getChatJson();
     const clone = messageEl.cloneNode(true);
@@ -560,7 +608,8 @@
     clone.querySelectorAll?.(".avatar, span.by, span.tstamp").forEach((node) => node.remove());
     const imgEl = clone.querySelector?.("img[src]");
     if (!imgEl) return null;
-    const src = imgEl.getAttribute("src") || "";
+    const src = (imgEl.getAttribute("src") || "").trim();
+    if (!src) return null;
     const absolute = safeToAbsoluteUrl(src);
     return absolute || null;
   }
@@ -569,6 +618,7 @@
     const { toAbsoluteUrl } = getUtils();
     const { buildReplacementMaps, findReplacementForMessage } = getAvatarRules();
     const { resolveMessageId, buildChatJsonEntry } = getChatJson();
+    const { resolveMessageContext, shouldInheritMessageContext } = getMessageContext();
     const { resolveRoleForMessage } = getRoleParser();
     const safeToAbsoluteUrl =
       typeof toAbsoluteUrl === "function" ? toAbsoluteUrl : (value) => String(value || "");
@@ -590,24 +640,51 @@
         : { byPair: new Map(), byOriginal: new Map() };
 
     const messages = Array.from(document.querySelectorAll("div.message"));
+    let previousMessageContext = { speaker: "", avatarSrc: "", speakerImageUrl: "" };
     const rows = messages.map((messageEl, index) => {
-      const speaker = getMessageSpeakerName(messageEl);
-      const avatarImg = getMessageAvatarImage(messageEl);
-      const rawCurrentSrc = avatarImg?.getAttribute("src") || "";
-      const currentSrc = safeToAbsoluteUrl(rawCurrentSrc);
-      const replacement =
-        typeof findReplacementForMessage === "function"
-          ? findReplacementForMessage(
-              { name: speaker, currentSrc },
-              maps,
-              { toAbsoluteUrl: safeToAbsoluteUrl, normalizeSpeakerName }
-            )
-          : "";
-      const imageUrl = replacement || currentSrc;
       const role =
         typeof resolveRoleForMessage === "function"
           ? resolveRoleForMessage(messageEl)
           : "character";
+      const rawSpeaker = getMessageSpeakerName(messageEl);
+      const avatarImg = getMessageAvatarImage(messageEl);
+      const rawCurrentSrc = (avatarImg?.getAttribute("src") || "").trim();
+      const currentSrc = rawCurrentSrc ? safeToAbsoluteUrl(rawCurrentSrc) : "";
+      const canInherit =
+        typeof shouldInheritMessageContext === "function"
+          ? shouldInheritMessageContext(role)
+          : String(role || "").toLowerCase() !== "system";
+      const fallbackContext = canInherit ? previousMessageContext : { speaker: "", avatarSrc: "", speakerImageUrl: "" };
+      const resolvedContext =
+        typeof resolveMessageContext === "function"
+          ? resolveMessageContext(
+              { speaker: rawSpeaker, avatarSrc: currentSrc, speakerImageUrl: currentSrc },
+              fallbackContext
+            )
+          : {
+              speaker: rawSpeaker || fallbackContext.speaker || "",
+              avatarSrc: currentSrc || fallbackContext.avatarSrc || "",
+              speakerImageUrl: currentSrc || fallbackContext.speakerImageUrl || fallbackContext.avatarSrc || "",
+            };
+      const speaker = resolvedContext.speaker;
+      const effectiveCurrentSrc = resolvedContext.avatarSrc;
+      const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || effectiveCurrentSrc;
+      const replacement =
+        typeof findReplacementForMessage === "function"
+          ? findReplacementForMessage(
+              { name: speaker, currentSrc: effectiveCurrentSrc },
+              maps,
+              { toAbsoluteUrl: safeToAbsoluteUrl, normalizeSpeakerName }
+            )
+          : "";
+      const imageUrl = replacement || effectiveSpeakerImageUrl;
+      if (canInherit) {
+        previousMessageContext = {
+          speaker,
+          avatarSrc: effectiveCurrentSrc,
+          speakerImageUrl: imageUrl || effectiveSpeakerImageUrl || "",
+        };
+      }
       const inlineImageUrl = getInlineMessageImageUrl(messageEl);
       const messageId =
         messageEl.getAttribute("data-messageid") ||

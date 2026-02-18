@@ -34,6 +34,7 @@
         "js/shared/performance_utils.js",
         "js/content/avatar/avatar_rules.js",
         "js/content/export/html_chunk_serializer.js",
+        "js/content/export/message_context_parser.js",
         "js/content/avatar/avatar_processor.js",
         "js/content/export/chat_json_export.js",
         "js/content/export/chat_role_parser.js",
