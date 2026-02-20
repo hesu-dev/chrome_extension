@@ -658,7 +658,13 @@
   function buildAvatarReplacedChatJson(replacements) {
     const { toAbsoluteUrl } = getUtils();
     const { buildReplacementMaps, findReplacementForMessage } = getAvatarRules();
-    const { resolveMessageId, buildChatJsonEntry, parseRoll20DicePayload, collectJsonExportMessages } = getChatJson();
+    const {
+      resolveMessageId,
+      buildChatJsonEntry,
+      parseRoll20DicePayload,
+      collectJsonExportMessages,
+      normalizeImgurLinksInJsonText,
+    } = getChatJson();
     const { resolveMessageContext, shouldInheritMessageContext } = getMessageContext();
     const { resolveRoleForMessage } = getRoleParser();
     const safeToAbsoluteUrl =
@@ -763,7 +769,11 @@
       });
     });
 
-    return JSON.stringify(rows, null, 2);
+    const jsonText = JSON.stringify(rows, null, 2);
+    if (typeof normalizeImgurLinksInJsonText === "function") {
+      return normalizeImgurLinksInJsonText(jsonText);
+    }
+    return jsonText.replace(/https:\/\/(?:www\.)?imgur\.com\//gi, "https://i.imgur.com/");
   }
 
   // --- Initialization ---

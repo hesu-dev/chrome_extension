@@ -6,6 +6,7 @@ const {
   buildChatJsonEntry,
   collectJsonExportMessages,
   isHiddenMessagePlaceholderText,
+  normalizeImgurLinksInJsonText,
 } = require("../js/content/export/chat_json_export.js");
 
 const COC1_HTML = `
@@ -835,4 +836,36 @@ test("collectJsonExportMessages excludes display-none messages", () => {
   const collected = collectJsonExportMessages(fakeRoot);
   assert.equal(collected.length, 1);
   assert.equal(collected[0], visibleMessage);
+});
+
+test("normalizeImgurLinksInJsonText converts imgur.com links to direct i.imgur.com links", () => {
+  const rawJson = JSON.stringify({
+    speakerImageUrl: "https://imgur.com/I1nyBqA.png",
+    imageUrl: "https://www.imgur.com/AbCdE12.jpg?foo=bar",
+  });
+
+  const normalized = normalizeImgurLinksInJsonText(rawJson);
+
+  assert.equal(
+    normalized,
+    JSON.stringify({
+      speakerImageUrl: "https://i.imgur.com/I1nyBqA.png",
+      imageUrl: "https://i.imgur.com/AbCdE12.jpg?foo=bar",
+    })
+  );
+});
+
+test("normalizeImgurLinksInJsonText leaves existing i.imgur.com links unchanged", () => {
+  const rawJson = JSON.stringify({
+    speakerImageUrl: "https://i.imgur.com/I1nyBqA.png",
+  });
+
+  const normalized = normalizeImgurLinksInJsonText(rawJson);
+
+  assert.equal(
+    normalized,
+    JSON.stringify({
+      speakerImageUrl: "https://i.imgur.com/I1nyBqA.png",
+    })
+  );
 });
