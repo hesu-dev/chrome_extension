@@ -22,7 +22,7 @@
   }
 
   function shouldInheritMessageContext(role) {
-    return String(role || "").toLowerCase() !== "system";
+    return true;
   }
 
   const api = {

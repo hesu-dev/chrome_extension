@@ -422,6 +422,7 @@
       throw new Error("Roll20CleanerDom.processVisibleNodes is missing!");
     }
 
+    removeHiddenPlaceholderMessages(clone);
     removeSheetTemplateAreaNewlines(clone);
     removeNonSingleFileAttrs(clone);
     repeatCollapsedMessageMeta(clone);
@@ -487,6 +488,7 @@
     const { applyAvatarReplacementsToClone } = getAvatar();
     const { serializeDocumentCloneToChunks } = getDom();
     const clone = document.documentElement.cloneNode(true);
+    removeHiddenPlaceholderMessages(clone);
     repeatCollapsedMessageMeta(clone);
     if (applyAvatarReplacementsToClone) {
       applyAvatarReplacementsToClone(clone, replacements);
@@ -555,6 +557,28 @@
     return Array.from(messageEl.children || []).find((child) => child.matches?.(selector));
   }
 
+  function isHiddenPlaceholderMessage(messageEl) {
+    if (!messageEl?.classList) return false;
+    if (!messageEl.classList.contains("message") || !messageEl.classList.contains("general")) {
+      return false;
+    }
+    const { isHiddenMessagePlaceholderText } = getChatJson();
+    const text = messageEl.textContent || "";
+    if (typeof isHiddenMessagePlaceholderText === "function") {
+      return isHiddenMessagePlaceholderText(text);
+    }
+    return String(text).includes("This message has been hidden");
+  }
+
+  function removeHiddenPlaceholderMessages(rootEl) {
+    const messages = Array.from(rootEl?.querySelectorAll?.("div.message.general") || []);
+    messages.forEach((messageEl) => {
+      if (isHiddenPlaceholderMessage(messageEl)) {
+        messageEl.remove();
+      }
+    });
+  }
+
   function repeatCollapsedMessageMeta(rootEl) {
     const messages = Array.from(rootEl.querySelectorAll("div.message"));
     let prevSpacer = null;
@@ -617,7 +641,7 @@
   function buildAvatarReplacedChatJson(replacements) {
     const { toAbsoluteUrl } = getUtils();
     const { buildReplacementMaps, findReplacementForMessage } = getAvatarRules();
-    const { resolveMessageId, buildChatJsonEntry } = getChatJson();
+    const { resolveMessageId, buildChatJsonEntry, parseRoll20DicePayload } = getChatJson();
     const { resolveMessageContext, shouldInheritMessageContext } = getMessageContext();
     const { resolveRoleForMessage } = getRoleParser();
     const safeToAbsoluteUrl =
@@ -639,7 +663,9 @@
           })
         : { byPair: new Map(), byOriginal: new Map() };
 
-    const messages = Array.from(document.querySelectorAll("div.message"));
+    const messages = Array.from(document.querySelectorAll("div.message")).filter(
+      (messageEl) => !isHiddenPlaceholderMessage(messageEl)
+    );
     let previousMessageContext = { speaker: "", avatarSrc: "", speakerImageUrl: "" };
     const rows = messages.map((messageEl, index) => {
       const role =
@@ -686,6 +712,14 @@
         };
       }
       const inlineImageUrl = getInlineMessageImageUrl(messageEl);
+      const dice =
+        typeof parseRoll20DicePayload === "function"
+          ? parseRoll20DicePayload({
+              role,
+              html: messageEl?.innerHTML || "",
+            })
+          : null;
+      const roleForEntry = dice ? "dice" : role;
       const messageId =
         messageEl.getAttribute("data-messageid") ||
         messageEl.id ||
@@ -695,11 +729,12 @@
       return safeBuildChatJsonEntry({
         id: safeResolveMessageId({ id: messageId }, index),
         speaker,
-        role,
+        role: roleForEntry,
         text: extractMessageText(messageEl),
         imageUrl: inlineImageUrl,
         speakerImageUrl: imageUrl || null,
         nameColor: null,
+        dice,
       });
     });
 

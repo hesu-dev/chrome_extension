@@ -1,6 +1,6 @@
 (function () {
   const SYSTEM_CLASS_NAMES = ["desc", "em", "emas"];
-  const DICE_TEMPLATE_CLASS_PREFIX = "sheet-rolltemplate-coc";
+  const DICE_TEMPLATE_CLASS_PREFIX = "sheet-rolltemplate-";
 
   function classListHasPrefix(node, prefix) {
     if (!node?.classList || !prefix) return false;

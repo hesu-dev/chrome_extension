@@ -54,7 +54,8 @@ test("resolveMessageContext prefers previously replaced speakerImageUrl", () => 
   });
 });
 
-test("shouldInheritMessageContext returns false for system role", () => {
-  assert.equal(shouldInheritMessageContext("system"), false);
+test("shouldInheritMessageContext returns true for system role", () => {
+  assert.equal(shouldInheritMessageContext("system"), true);
+  assert.equal(shouldInheritMessageContext("dice"), true);
   assert.equal(shouldInheritMessageContext("character"), true);
 });
