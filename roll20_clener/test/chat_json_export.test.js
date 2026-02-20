@@ -256,6 +256,77 @@ const INS_DICE_HTML = `
   </div>
 </div>`;
 
+const INS_SKILL_HTML = `
+<div class="sheet-rolltemplate-InsSkill">
+  <div class="sheet-template">
+    <div class="sheet-ch-name">Hub Igriucko</div>
+    <div class="sheet-subj"><span>공격</span><strong>기본공격</strong></div>
+    <div class="sheet-dice-area">
+      <div class="sheet-total">
+        <div class="sheet-roll">
+          <div class="sheet-dice-val"><span class="inlinerollresult" title="Rolling (2+6) = (2+6)">8</span></div>
+        </div>
+      </div>
+      <div class="sheet-data">
+        <div class="sheet-subj">구타<span class="inlinerollresult" title="Rolling 0 = 0"></span></div>
+        <div class="sheet-target">
+          <span>목표치</span>
+          <strong><span class="inlinerollresult" title="Rolling 5 = 5">5</span></strong>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-desc">목표 1명을 선택해서 명중판정을 한다.</div>
+  </div>
+</div>`;
+
+const INS_SKILL_NO_INPUT_HTML = `
+<div class="sheet-rolltemplate-InsSkill">
+  <div class="sheet-template">
+    <div class="sheet-ch-name">Hub Igriucko</div>
+    <div class="sheet-subj"><span>서포트</span><strong>전장이동</strong></div>
+    <div class="sheet-desc">지원행동. 전투에 참가한 캐릭터 전원은 다음 라운드의 시작에 플롯을 한다.</div>
+  </div>
+</div>`;
+
+const INS_DESC_HTML = `
+<div class="sheet-rolltemplate-InsDesc">
+  <div class="sheet-template">
+    <div class="sheet-ch-name">Hub Igriucko</div>
+    <div class="sheet-subj">
+      <span>아이템</span>
+      <strong>무기</strong>
+    </div>
+    <div class="sheet-desc">전투 중에 자신이 행동판정을 위해 주사위를 굴렸을 때 사용할 수 있다. 굴림 결과와 관계없이 다시 주사위를 굴릴 수 있다.</div>
+  </div>
+</div>`;
+
+const INS_DESC_SCENE_HTML = `
+<div class="sheet-rolltemplate-InsDesc">
+  <div class="sheet-template">
+    <div class="sheet-ch-name">Hub Igriucko</div>
+    <div class="sheet-subj">사실은 무서운 현대 일본 장면표</div>
+    <div class="sheet-desc">어두운 적색의 석양. 태양은 저물어가고, 하늘은 피처럼 붉다. 불안한 기분이 커져 간다...</div>
+  </div>
+</div>`;
+
+const INS_DESC_EMOTION_HTML = `
+<div class="sheet-rolltemplate-InsDesc">
+  <div class="sheet-template">
+    <div class="sheet-ch-name">Hub Igriucko</div>
+    <div class="sheet-desc sheet-emot">애정(플러스) / 질투(마이너스)</div>
+  </div>
+</div>`;
+
+const INS_PLOT_HTML = `
+<div class="sheet-rolltemplate-InsPlot">
+  <div class="sheet-template">
+    <div class="sheet-random">
+      <strong><i>1</i><em>1.폭력</em></strong>
+      <span><i>6</i><em>파괴</em></span>
+    </div>
+  </div>
+</div>`;
+
 test("parseRoll20DicePayload extracts coc-1 inputs", () => {
   const dice = parseRoll20DicePayload({
     role: "dice",
@@ -548,6 +619,139 @@ test("parseRoll20DicePayload extracts InsDice payload", () => {
   });
 });
 
+test("parseRoll20DicePayload extracts InsSkill ability payload", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: INS_SKILL_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "insane",
+    template: "ability",
+    inputs: {
+      type: "공격",
+      title: "기본공격",
+      detail: "목표 1명을 선택해서 명중판정을 한다.",
+      skill: "구타",
+      target: 5,
+      roll: 8,
+    },
+  });
+});
+
+test("parseRoll20DicePayload extracts InsSkill with null defaults when no input area", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: INS_SKILL_NO_INPUT_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "insane",
+    template: "ability",
+    inputs: {
+      type: "서포트",
+      title: "전장이동",
+      detail: "지원행동. 전투에 참가한 캐릭터 전원은 다음 라운드의 시작에 플롯을 한다.",
+      skill: null,
+      target: null,
+      roll: null,
+    },
+  });
+});
+
+test("parseRoll20DicePayload extracts InsDesc item payload", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: INS_DESC_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "insane",
+    template: "item",
+    inputs: {
+      type: "아이템",
+      title: "무기",
+      detail:
+        "전투 중에 자신이 행동판정을 위해 주사위를 굴렸을 때 사용할 수 있다. 굴림 결과와 관계없이 다시 주사위를 굴릴 수 있다.",
+      skill: null,
+      target: null,
+      roll: null,
+    },
+  });
+});
+
+test("parseRoll20DicePayload extracts InsDesc scene-table payload", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: INS_DESC_SCENE_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "insane",
+    template: "scene-table",
+    inputs: {
+      type: null,
+      title: "장면표",
+      detail: "어두운 적색의 석양. 태양은 저물어가고, 하늘은 피처럼 붉다. 불안한 기분이 커져 간다...",
+      skill: null,
+      target: null,
+      roll: null,
+    },
+  });
+});
+
+test("parseRoll20DicePayload extracts InsDesc emotion payload", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: INS_DESC_EMOTION_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "insane",
+    template: "emotion",
+    inputs: {
+      type: "감정",
+      title: "애정(플러스) / 질투(마이너스)",
+      detail: null,
+      skill: null,
+      target: null,
+      roll: null,
+    },
+  });
+});
+
+test("parseRoll20DicePayload extracts InsPlot dice payload", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: INS_PLOT_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "insane",
+    template: "dice",
+    inputs: {
+      type: null,
+      title: "1. 폭력",
+      detail: null,
+      skill: "포박",
+      target: null,
+      roll: null,
+    },
+  });
+});
+
 test("buildChatJsonEntry includes dice when provided", () => {
   const entry = buildChatJsonEntry({
     id: "1",
@@ -560,6 +764,40 @@ test("buildChatJsonEntry includes dice when provided", () => {
   assert.equal(entry.dice?.inputs?.skill, "SAN");
   assert.equal(entry.dice?.inputs?.success, 55);
   assert.equal(entry.dice?.inputs?.roll, 67);
+});
+
+test("buildChatJsonEntry omits null fields recursively", () => {
+  const entry = buildChatJsonEntry({
+    id: "2",
+    speaker: "테스터",
+    role: "dice",
+    text: "sample",
+    imageUrl: null,
+    speakerImageUrl: null,
+    nameColor: null,
+    dice: {
+      v: 1,
+      source: "roll20",
+      rule: "insane",
+      template: "item",
+      inputs: {
+        type: "아이템",
+        title: "무기",
+        detail: "설명",
+        skill: null,
+        target: null,
+        roll: null,
+      },
+    },
+  });
+
+  assert.equal("imageUrl" in entry, false);
+  assert.equal("speakerImageUrl" in entry, false);
+  assert.equal("nameColor" in entry, false);
+  assert.equal("skill" in entry.dice.inputs, false);
+  assert.equal("target" in entry.dice.inputs, false);
+  assert.equal("roll" in entry.dice.inputs, false);
+  assert.equal(entry.dice.inputs.type, "아이템");
 });
 
 test("isHiddenMessagePlaceholderText detects hidden placeholder", () => {
