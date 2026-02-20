@@ -701,6 +701,29 @@
     return String((Number(index) || 0) + 1);
   }
 
+  function collectJsonExportMessages(root) {
+    if (!root || typeof root.querySelectorAll !== "function") return [];
+    const view =
+      root.defaultView ||
+      (root.ownerDocument && root.ownerDocument.defaultView) ||
+      (typeof window !== "undefined" ? window : null);
+    return Array.from(root.querySelectorAll("div.message")).filter((messageEl) => {
+      const inlineDisplay = String(messageEl?.style?.display || "")
+        .trim()
+        .toLowerCase();
+      if (inlineDisplay === "none") return false;
+
+      if (view && typeof view.getComputedStyle === "function") {
+        const computedDisplay = String(view.getComputedStyle(messageEl)?.display || "")
+          .trim()
+          .toLowerCase();
+        if (computedDisplay === "none") return false;
+      }
+
+      return true;
+    });
+  }
+
   function buildChatJsonEntry({
     id,
     speaker,
@@ -754,6 +777,7 @@
     isHiddenMessagePlaceholderText,
     normalizeMessageText,
     resolveMessageId,
+    collectJsonExportMessages,
     buildChatJsonEntry,
   };
 

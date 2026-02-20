@@ -641,7 +641,7 @@
   function buildAvatarReplacedChatJson(replacements) {
     const { toAbsoluteUrl } = getUtils();
     const { buildReplacementMaps, findReplacementForMessage } = getAvatarRules();
-    const { resolveMessageId, buildChatJsonEntry, parseRoll20DicePayload } = getChatJson();
+    const { resolveMessageId, buildChatJsonEntry, parseRoll20DicePayload, collectJsonExportMessages } = getChatJson();
     const { resolveMessageContext, shouldInheritMessageContext } = getMessageContext();
     const { resolveRoleForMessage } = getRoleParser();
     const safeToAbsoluteUrl =
@@ -663,9 +663,10 @@
           })
         : { byPair: new Map(), byOriginal: new Map() };
 
-    const messages = Array.from(document.querySelectorAll("div.message")).filter(
-      (messageEl) => !isHiddenPlaceholderMessage(messageEl)
-    );
+    const messages =
+      typeof collectJsonExportMessages === "function"
+        ? collectJsonExportMessages(document)
+        : Array.from(document.querySelectorAll("div.message"));
     let previousMessageContext = { speaker: "", avatarSrc: "", speakerImageUrl: "" };
     const rows = messages.map((messageEl, index) => {
       const role =

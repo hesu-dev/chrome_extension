@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   parseRoll20DicePayload,
   buildChatJsonEntry,
+  collectJsonExportMessages,
   isHiddenMessagePlaceholderText,
 } = require("../js/content/export/chat_json_export.js");
 
@@ -804,4 +805,34 @@ test("isHiddenMessagePlaceholderText detects hidden placeholder", () => {
   assert.equal(isHiddenMessagePlaceholderText("This message has been hidden."), true);
   assert.equal(isHiddenMessagePlaceholderText("  This message has been hidden.  "), true);
   assert.equal(isHiddenMessagePlaceholderText("Normal message"), false);
+});
+
+test("collectJsonExportMessages excludes display-none messages", () => {
+  const visibleMessage = {
+    id: "visible",
+    style: { display: "" },
+    classList: { contains: (name) => name === "message" },
+  };
+  const hiddenByStyleMessage = {
+    id: "hidden-style",
+    style: { display: "none" },
+    classList: { contains: (name) => name === "message" },
+    getAttribute: (name) => (name === "data-roll20-cleaner-color-hide" ? "true" : null),
+  };
+  const hiddenPlaceholderMessage = {
+    id: "hidden-placeholder",
+    style: { display: "none" },
+    textContent: "This message has been hidden.",
+    classList: { contains: (name) => name === "message" },
+  };
+  const fakeRoot = {
+    querySelectorAll: (selector) =>
+      selector === "div.message"
+        ? [visibleMessage, hiddenByStyleMessage, hiddenPlaceholderMessage]
+        : [],
+  };
+
+  const collected = collectJsonExportMessages(fakeRoot);
+  assert.equal(collected.length, 1);
+  assert.equal(collected[0], visibleMessage);
 });
