@@ -529,7 +529,10 @@
   }
 
   function normalizeSpeakerName(raw) {
-    return String(raw || "").replace(/\s+/g, " ").trim().replace(/:+$/, "").trim();
+    const compact = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!compact) return "";
+    if (/^:+$/.test(compact)) return compact;
+    return compact.replace(/:+$/, "").trim();
   }
 
   function getMessageSpeakerName(messageEl) {
@@ -545,6 +548,20 @@
     );
     if (!avatarWrap) return null;
     return avatarWrap.querySelector("img");
+  }
+
+  function hasDescStyle(messageEl) {
+    if (!messageEl?.classList) return false;
+    return messageEl.classList.contains("desc");
+  }
+
+  function hasEmoteStyle(messageEl) {
+    if (!messageEl?.classList) return false;
+    return (
+      messageEl.classList.contains("emote") ||
+      messageEl.classList.contains("em") ||
+      messageEl.classList.contains("emas")
+    );
   }
 
   function getDirectMessageChildByClass(messageEl, className) {
@@ -677,9 +694,16 @@
       const avatarImg = getMessageAvatarImage(messageEl);
       const rawCurrentSrc = (avatarImg?.getAttribute("src") || "").trim();
       const currentSrc = rawCurrentSrc ? safeToAbsoluteUrl(rawCurrentSrc) : "";
+      const descStyle = hasDescStyle(messageEl);
+      const emoteStyle = hasEmoteStyle(messageEl);
+      const hasAvatar = !!avatarImg;
       const canInherit =
         typeof shouldInheritMessageContext === "function"
-          ? shouldInheritMessageContext(role)
+          ? shouldInheritMessageContext(role, {
+              hasDescStyle: descStyle,
+              hasEmoteStyle: emoteStyle,
+              hasAvatar,
+            })
           : String(role || "").toLowerCase() !== "system";
       const fallbackContext = canInherit ? previousMessageContext : { speaker: "", avatarSrc: "", speakerImageUrl: "" };
       const resolvedContext =

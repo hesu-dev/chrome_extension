@@ -1,6 +1,9 @@
 (function () {
   function normalizeSpeakerName(raw) {
-    return String(raw || "").replace(/\s+/g, " ").trim().replace(/:+$/, "").trim();
+    const compact = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!compact) return "";
+    if (/^:+$/.test(compact)) return compact;
+    return compact.replace(/:+$/, "").trim();
   }
 
   function resolveMessageContext(current, previous) {
@@ -21,7 +24,10 @@
     };
   }
 
-  function shouldInheritMessageContext(role) {
+  function shouldInheritMessageContext(role, options = {}) {
+    if (options && (options.hasDescStyle || options.hasEmoteStyle || options.hasAvatar)) {
+      return false;
+    }
     return true;
   }
 
