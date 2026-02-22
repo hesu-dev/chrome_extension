@@ -632,9 +632,15 @@
   }
 
   function extractMessageText(messageEl) {
-    const { normalizeMessageText } = getChatJson();
+    const { normalizeMessageText, joinDescAnchorLines } = getChatJson();
     const clone = messageEl.cloneNode(true);
     clone.querySelectorAll?.("span.by, span.tstamp, .avatar").forEach((node) => node.remove());
+
+    if (hasDescStyle(messageEl) && typeof joinDescAnchorLines === "function") {
+      const descWithLineBreaks = joinDescAnchorLines(clone.innerHTML || "", "\n");
+      if (descWithLineBreaks) return descWithLineBreaks;
+    }
+
     const raw = clone.textContent || "";
     if (normalizeMessageText) return normalizeMessageText(raw);
     return String(raw).replace(/\s+/g, " ").trim();
@@ -676,7 +682,16 @@
     const safeBuildChatJsonEntry =
       typeof buildChatJsonEntry === "function"
         ? buildChatJsonEntry
-        : ({ id, imageUrl, speaker, text }) => ({ id, "이미지 링크": imageUrl, "스피커": speaker, text });
+        : ({ id, imageUrl, speaker, text }) => ({
+            id,
+            "이미지 링크": imageUrl,
+            "스피커": speaker,
+            text,
+            safetext: String(text || "")
+              .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")
+              .replace(/\s+/g, " ")
+              .trim(),
+          });
 
     const maps =
       typeof buildReplacementMaps === "function"

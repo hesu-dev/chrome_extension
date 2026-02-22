@@ -25,6 +25,23 @@ function buildMockMessage(innerHtml) {
   };
 }
 
+function buildMockMessageWithClasses(classNames) {
+  const tokens = new Set(Array.isArray(classNames) ? classNames : []);
+  return {
+    querySelector() {
+      return null;
+    },
+    classList: {
+      contains(name) {
+        return tokens.has(name);
+      },
+      [Symbol.iterator]: function* () {
+        for (const token of tokens) yield token;
+      },
+    },
+  };
+}
+
 test("resolveRoleForMessage treats coc templates as dice", () => {
   const root = buildMockMessage('<div class="sheet-rolltemplate-coc-1"></div>');
   assert.equal(resolveRoleForMessage(root), "dice");
@@ -38,4 +55,11 @@ test("resolveRoleForMessage treats insane templates as dice", () => {
 test("resolveRoleForMessage treats InsDice templates as dice", () => {
   const root = buildMockMessage('<div class="sheet-rolltemplate-InsDice"></div>');
   assert.equal(resolveRoleForMessage(root), "dice");
+});
+
+test("resolveRoleForMessage treats desc/emote/em/emas as system", () => {
+  assert.equal(resolveRoleForMessage(buildMockMessageWithClasses(["desc"])), "system");
+  assert.equal(resolveRoleForMessage(buildMockMessageWithClasses(["emote"])), "system");
+  assert.equal(resolveRoleForMessage(buildMockMessageWithClasses(["em"])), "system");
+  assert.equal(resolveRoleForMessage(buildMockMessageWithClasses(["emas"])), "system");
 });

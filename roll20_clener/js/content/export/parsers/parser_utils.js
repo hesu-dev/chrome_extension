@@ -7,6 +7,12 @@
     return String(raw || "").replace(/\s+/g, " ").trim();
   }
 
+  function toSafeText(raw) {
+    const normalized = normalizeText(raw);
+    if (!normalized) return "";
+    return normalizeText(normalized.replace(/[^\p{L}\p{N}\s!?.,~]/gu, ""));
+  }
+
   function extractFirstInteger(raw) {
     const matched = String(raw || "").match(/-?\d+/);
     if (!matched) return null;
@@ -183,6 +189,7 @@
   const api = {
     stripHtmlTags,
     normalizeText,
+    toSafeText,
     extractFirstInteger,
     extractFirstIntegerFromRenderedHtml,
     collectInlineRollSpanIntegers,

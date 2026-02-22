@@ -49,6 +49,27 @@
     return String(raw || "").replace(/\s+/g, " ").trim();
   }
 
+  function joinDescAnchorLines(rawHtml, lineBreakToken = "\n") {
+    const { normalizeText, stripHtmlTags } = parserUtils;
+    const safeNormalize = typeof normalizeText === "function" ? normalizeText : normalizeMessageText;
+    const safeStripTags =
+      typeof stripHtmlTags === "function"
+        ? stripHtmlTags
+        : (html) => String(html || "").replace(/<[^>]*>/g, " ");
+
+    const lines = [];
+    const regex = /<a\b[^>]*>([\s\S]*?)<\/a>/gi;
+    let matched = regex.exec(String(rawHtml || ""));
+    while (matched) {
+      const line = safeNormalize(safeStripTags(matched[1] || ""));
+      if (line) lines.push(line);
+      matched = regex.exec(String(rawHtml || ""));
+    }
+
+    if (lines.length < 2) return "";
+    return lines.join(String(lineBreakToken || "\n"));
+  }
+
   function normalizeImgurLinksInJsonText(rawJsonText) {
     return String(rawJsonText || "").replace(
       /https:\/\/(?:www\.)?imgur\.com\//gi,
@@ -116,11 +137,21 @@
     nameColor = null,
     dice = null,
   }) {
+    const safeTextBuilder =
+      typeof parserUtils.toSafeText === "function"
+        ? parserUtils.toSafeText
+        : (raw) =>
+            String(raw || "")
+              .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")
+              .replace(/\s+/g, " ")
+              .trim();
+    const normalizedText = String(text || "");
     const entry = {
       id: String(id || ""),
       speaker: String(speaker || ""),
       role: String(role || "character"),
-      text: String(text || ""),
+      text: normalizedText,
+      safetext: safeTextBuilder(normalizedText),
       imageUrl: imageUrl == null ? null : String(imageUrl),
       speakerImageUrl: speakerImageUrl == null ? null : String(speakerImageUrl),
       nameColor: nameColor == null ? null : String(nameColor),
@@ -137,6 +168,7 @@
     parseRoll20DicePayload,
     isHiddenMessagePlaceholderText,
     normalizeMessageText,
+    joinDescAnchorLines,
     normalizeImgurLinksInJsonText,
     resolveMessageId,
     collectJsonExportMessages,

@@ -7,6 +7,7 @@ const {
   collectJsonExportMessages,
   isHiddenMessagePlaceholderText,
   normalizeImgurLinksInJsonText,
+  joinDescAnchorLines,
 } = require("../js/content/export/chat_json_export.js");
 
 const COC1_HTML = `
@@ -802,6 +803,18 @@ test("buildChatJsonEntry omits null fields recursively", () => {
   assert.equal(entry.dice.inputs.type, "아이템");
 });
 
+test("buildChatJsonEntry adds safetext with special symbols removed", () => {
+  const entry = buildChatJsonEntry({
+    id: "3",
+    speaker: "테스터",
+    role: "character",
+    text: "안녕😀!! Roll20 #1 / 테스트✨",
+  });
+
+  assert.equal(entry.text, "안녕😀!! Roll20 #1 / 테스트✨");
+  assert.equal(entry.safetext, "안녕!! Roll20 1 테스트");
+});
+
 test("isHiddenMessagePlaceholderText detects hidden placeholder", () => {
   assert.equal(isHiddenMessagePlaceholderText("This message has been hidden."), true);
   assert.equal(isHiddenMessagePlaceholderText("  This message has been hidden.  "), true);
@@ -868,4 +881,17 @@ test("normalizeImgurLinksInJsonText leaves existing i.imgur.com links unchanged"
       speakerImageUrl: "https://i.imgur.com/I1nyBqA.png",
     })
   );
+});
+
+test("joinDescAnchorLines joins repeated desc anchors with newline", () => {
+  const html =
+    '<a style="color:#bababa">─────── 세이렌, 세이지 ───────</a><a style="color:white">SCENE : 세상을 등지고</a>';
+
+  assert.equal(joinDescAnchorLines(html), "─────── 세이렌, 세이지 ───────\nSCENE : 세상을 등지고");
+});
+
+test("joinDescAnchorLines returns empty string for single anchor", () => {
+  const html = '<a>SCENE : 세상을 등지고</a>';
+
+  assert.equal(joinDescAnchorLines(html), "");
 });

@@ -59,11 +59,11 @@ test("resolveMessageContext prefers previously replaced speakerImageUrl", () => 
   });
 });
 
-test("shouldInheritMessageContext returns true for system role", () => {
-  assert.equal(shouldInheritMessageContext("system"), true);
+test("shouldInheritMessageContext allows character continuity and blocks system continuity", () => {
+  assert.equal(shouldInheritMessageContext("system"), false);
   assert.equal(shouldInheritMessageContext("dice"), true);
   assert.equal(shouldInheritMessageContext("character"), true);
   assert.equal(shouldInheritMessageContext("system", { hasDescStyle: true }), false);
-  assert.equal(shouldInheritMessageContext("character", { hasAvatar: true }), false);
+  assert.equal(shouldInheritMessageContext("character", { hasAvatar: true }), true);
   assert.equal(shouldInheritMessageContext("system", { hasEmoteStyle: true }), false);
 });

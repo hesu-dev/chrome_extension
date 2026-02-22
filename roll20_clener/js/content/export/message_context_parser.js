@@ -25,7 +25,10 @@
   }
 
   function shouldInheritMessageContext(role, options = {}) {
-    if (options && (options.hasDescStyle || options.hasEmoteStyle || options.hasAvatar)) {
+    if (options && (options.hasDescStyle || options.hasEmoteStyle)) {
+      return false;
+    }
+    if (String(role || "").toLowerCase() === "system") {
       return false;
     }
     return true;
