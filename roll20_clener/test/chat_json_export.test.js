@@ -195,6 +195,82 @@ const COC_DEFENCE_2_HTML = `
   </table>
 </div>`;
 
+const COC_DEFAULT_HTML = `
+<div class="sheet-rolltemplate-coc-default">
+  <table>
+    <caption>관찰력</caption>
+    <tbody>
+      <tr>
+        <td class="sheet-template_label">기준치:</td>
+        <td class="sheet-template_value"><span>85</span>/<span>42</span>/<span>17</span></td>
+      </tr>
+      <tr>
+        <td class="sheet-template_label">굴림:</td>
+        <td class="sheet-template_value"><span>88</span></td>
+      </tr>
+      <tr>
+        <td class="sheet-template_label">판정결과:</td>
+        <td class="sheet-template_value">실패</td>
+      </tr>
+    </tbody>
+  </table>
+</div>`;
+
+const COC_BONUS_HTML = `
+<div class="sheet-rolltemplate-coc-bonus">
+  <table>
+    <caption>심리학</caption>
+    <tbody>
+      <tr>
+        <td class="sheet-template_label">기준치:</td>
+        <td class="sheet-template_value"><span>80</span>/<span>40</span>/<span>16</span></td>
+      </tr>
+      <tr>
+        <td class="sheet-template_label">굴림:</td>
+        <td class="sheet-template_value"><span>95</span>, <span>24</span>, <span>6</span></td>
+      </tr>
+      <tr>
+        <td class="sheet-template_label">+2:</td>
+        <td class="sheet-template_value">극단적 성공</td>
+      </tr>
+    </tbody>
+  </table>
+</div>`;
+
+const COC_BONUS_SUCCESS_FROM_THRESHOLD_HTML = `
+<div class="sheet-rolltemplate-coc-bonus">
+  <table>
+    <caption>위협</caption>
+    <tbody>
+      <tr>
+        <td class="sheet-template_label">기준치:</td>
+        <td class="sheet-template_value"><span>60</span>/<span>30</span>/<span>12</span></td>
+      </tr>
+      <tr>
+        <td class="sheet-template_label">굴림:</td>
+        <td class="sheet-template_value"><span>3</span>, <span>64</span>, <span>45</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>`;
+
+const COC_BONUS_EMPTY_CAPTION_HTML = `
+<div class="sheet-rolltemplate-coc-bonus">
+  <table>
+    <caption></caption>
+    <tbody>
+      <tr>
+        <td class="sheet-template_label">기준치:</td>
+        <td class="sheet-template_value"><span>80</span>/<span>40</span>/<span>16</span></td>
+      </tr>
+      <tr>
+        <td class="sheet-template_label">굴림:</td>
+        <td class="sheet-template_value"><span>92</span>, <span>24</span>, <span>97</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>`;
+
 const DEFAULT_TABLE_HTML = `
 <div class="sheet-rolltemplate-default">
   <table>
@@ -543,6 +619,66 @@ test("parseRoll20DicePayload extracts coc-defence-2 payload", () => {
   });
 });
 
+test("parseRoll20DicePayload treats coc-default as coc-1", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: COC_DEFAULT_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "coc7",
+    template: "coc-1",
+    inputs: { skill: "관찰력", roll: 88, success: 85 },
+  });
+});
+
+test("parseRoll20DicePayload treats coc-bonus as coc", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: COC_BONUS_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "coc7",
+    template: "coc",
+    inputs: { skill: "심리학", success: 80, rolls: [95, 24, 6] },
+  });
+});
+
+test("parseRoll20DicePayload uses threshold first value as success for coc-bonus", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: COC_BONUS_SUCCESS_FROM_THRESHOLD_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "coc7",
+    template: "coc",
+    inputs: { skill: "위협", success: 60, rolls: [3, 64, 45] },
+  });
+});
+
+test("parseRoll20DicePayload parses coc-bonus even when caption is empty", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: COC_BONUS_EMPTY_CAPTION_HTML,
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "coc7",
+    template: "coc",
+    inputs: { success: 80, rolls: [92, 24, 97] },
+  });
+});
+
 test("parseRoll20DicePayload extracts default table payload", () => {
   const dice = parseRoll20DicePayload({
     role: "system",
@@ -755,6 +891,26 @@ test("parseRoll20DicePayload extracts InsPlot dice payload", () => {
   });
 });
 
+test("parseRoll20DicePayload falls back to text-based coc parsing for unsupported templates", () => {
+  const dice = parseRoll20DicePayload({
+    role: "dice",
+    html: '<div class="sheet-rolltemplate-coc-2">심리학 기준치: 80/40/16 굴림: <span class="inlinerollresult">36</span> 판정결과: 어려운 성공</div>',
+  });
+
+  assert.deepEqual(dice, {
+    v: 1,
+    source: "roll20",
+    rule: "coc7",
+    template: "coc-text",
+    inputs: {
+      skill: "심리학",
+      success: 80,
+      roll: 36,
+      result: "어려운 성공",
+    },
+  });
+});
+
 test("buildChatJsonEntry includes dice when provided", () => {
   const entry = buildChatJsonEntry({
     id: "1",
@@ -767,6 +923,9 @@ test("buildChatJsonEntry includes dice when provided", () => {
   assert.equal(entry.dice?.inputs?.skill, "SAN");
   assert.equal(entry.dice?.inputs?.success, 55);
   assert.equal(entry.dice?.inputs?.roll, 67);
+  assert.equal(entry.timestamp, "");
+  assert.equal(entry.textColor, "");
+  assert.equal("nameColor" in entry, false);
 });
 
 test("buildChatJsonEntry omits null fields recursively", () => {
@@ -775,9 +934,10 @@ test("buildChatJsonEntry omits null fields recursively", () => {
     speaker: "테스터",
     role: "dice",
     text: "sample",
+    timestamp: "8:42PM",
+    textColor: "#aaaaaa",
     imageUrl: null,
     speakerImageUrl: null,
-    nameColor: null,
     dice: {
       v: 1,
       source: "roll20",
@@ -796,11 +956,24 @@ test("buildChatJsonEntry omits null fields recursively", () => {
 
   assert.equal("imageUrl" in entry, false);
   assert.equal("speakerImageUrl" in entry, false);
-  assert.equal("nameColor" in entry, false);
   assert.equal("skill" in entry.dice.inputs, false);
   assert.equal("target" in entry.dice.inputs, false);
   assert.equal("roll" in entry.dice.inputs, false);
   assert.equal(entry.dice.inputs.type, "아이템");
+  assert.equal(entry.timestamp, "오후 8:42");
+  assert.equal(entry.textColor, "#aaaaaa");
+});
+
+test("buildChatJsonEntry formats long timestamp strings to korean meridiem format", () => {
+  const entry = buildChatJsonEntry({
+    id: "4",
+    speaker: "테스터",
+    role: "character",
+    text: "sample",
+    timestamp: "May 26, 2025 12:01AM",
+  });
+
+  assert.equal(entry.timestamp, "오전 12:01");
 });
 
 test("buildChatJsonEntry adds safetext with special symbols removed", () => {

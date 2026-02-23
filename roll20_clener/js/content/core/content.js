@@ -550,6 +550,37 @@
     return avatarWrap.querySelector("img");
   }
 
+  function getMessageTimestamp(messageEl) {
+    const tstampEl = getDirectMessageChildBySelector(messageEl, "span.tstamp");
+    return String(tstampEl?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function extractInlineColorValue(rawStyle) {
+    const matched = String(rawStyle || "").match(/(?:^|;)\s*color\s*:\s*([^;]+)/i);
+    if (!matched?.[1]) return "";
+    return String(matched[1]).trim();
+  }
+
+  function getMessageTextColor(messageEl) {
+    const directSpans = Array.from(messageEl?.children || []).filter((child) =>
+      child.matches?.("span")
+    );
+    const textSpan = directSpans.find((child) => {
+      if (child.matches?.("span.by") || child.matches?.("span.tstamp")) return false;
+      if (child.classList?.contains("inlinerollresult")) return false;
+      return true;
+    });
+    if (!textSpan) return "";
+
+    const inlineFromAttr = extractInlineColorValue(textSpan.getAttribute?.("style"));
+    if (inlineFromAttr) return inlineFromAttr;
+
+    const inlineFromStyle = String(textSpan.style?.color || "").trim();
+    if (inlineFromStyle) return inlineFromStyle;
+
+    return "";
+  }
+
   function hasDescStyle(messageEl) {
     if (!messageEl?.classList) return false;
     return messageEl.classList.contains("desc");
@@ -682,10 +713,12 @@
     const safeBuildChatJsonEntry =
       typeof buildChatJsonEntry === "function"
         ? buildChatJsonEntry
-        : ({ id, imageUrl, speaker, text }) => ({
+        : ({ id, imageUrl, speaker, text, timestamp, textColor }) => ({
             id,
             "이미지 링크": imageUrl,
             "스피커": speaker,
+            timestamp: String(timestamp || ""),
+            textColor: String(textColor || ""),
             text,
             safetext: String(text || "")
               .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")
@@ -776,10 +809,11 @@
         id: safeResolveMessageId({ id: messageId }, index),
         speaker,
         role: roleForEntry,
+        timestamp: getMessageTimestamp(messageEl),
+        textColor: getMessageTextColor(messageEl),
         text: extractMessageText(messageEl),
         imageUrl: inlineImageUrl,
         speakerImageUrl: imageUrl || null,
-        nameColor: null,
         dice,
       });
     });

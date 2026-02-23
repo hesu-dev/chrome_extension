@@ -23,7 +23,7 @@
   }
 
   function parseRoll20DicePayload({ role, html }) {
-    const { extractTemplateName } = parserUtils;
+    const { extractTemplateName, stripHtmlTags, normalizeText } = parserUtils;
     const template = extractTemplateName(html);
     const parseCocDefaultPayload = cocRuleParser.parseCocDefaultPayload;
     if (typeof parseCocDefaultPayload === "function") {
@@ -40,6 +40,30 @@
     for (const parseRulePayload of ruleParsers) {
       const parsed = parseRulePayload({ html, template });
       if (parsed) return parsed;
+    }
+
+    const safeNormalize = typeof normalizeText === "function" ? normalizeText : normalizeMessageText;
+    const safeStripTags =
+      typeof stripHtmlTags === "function"
+        ? stripHtmlTags
+        : (rawHtml) => String(rawHtml || "").replace(/<[^>]*>/g, " ");
+    const renderedText = safeNormalize(safeStripTags(html));
+    const cocLikeMatch = renderedText.match(
+      /^(.+?)\s+기준치:\s*(\d+)(?:\s*\/\s*\d+){0,2}\s+굴림:\s*(\d+)(?:\s+판정결과:\s*(.+))?$/i
+    );
+    if (cocLikeMatch) {
+      return {
+        v: 1,
+        source: "roll20",
+        rule: "coc7",
+        template: "coc-text",
+        inputs: {
+          skill: safeNormalize(cocLikeMatch[1] || ""),
+          success: Number(cocLikeMatch[2]),
+          roll: Number(cocLikeMatch[3]),
+          result: safeNormalize(cocLikeMatch[4] || "") || null,
+        },
+      };
     }
 
     return null;
@@ -106,6 +130,23 @@
     });
   }
 
+  function formatTimestampToKoreanMeridiem(rawTimestamp) {
+    const normalized = normalizeMessageText(rawTimestamp);
+    if (!normalized) return "";
+
+    const alreadyKorean = normalized.match(/^(오전|오후)\s*(\d{1,2}):(\d{2})$/);
+    if (alreadyKorean) return `${alreadyKorean[1]} ${alreadyKorean[2]}:${alreadyKorean[3]}`;
+
+    const ampmMatch = normalized.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\b/i);
+    if (!ampmMatch) return normalized;
+
+    const hour = Number(ampmMatch[1]);
+    const minute = ampmMatch[2];
+    if (!Number.isFinite(hour) || hour < 1 || hour > 12) return normalized;
+    const meridiem = String(ampmMatch[3] || "").toUpperCase() === "AM" ? "오전" : "오후";
+    return `${meridiem} ${hour}:${minute}`;
+  }
+
   function omitNullishDeep(value) {
     if (value == null) return undefined;
 
@@ -132,9 +173,10 @@
     speaker,
     role = "character",
     text,
+    timestamp = "",
+    textColor = "",
     imageUrl = null,
     speakerImageUrl = null,
-    nameColor = null,
     dice = null,
   }) {
     const safeTextBuilder =
@@ -150,11 +192,12 @@
       id: String(id || ""),
       speaker: String(speaker || ""),
       role: String(role || "character"),
+      timestamp: formatTimestampToKoreanMeridiem(timestamp),
+      textColor: String(textColor || "").trim(),
       text: normalizedText,
       safetext: safeTextBuilder(normalizedText),
       imageUrl: imageUrl == null ? null : String(imageUrl),
       speakerImageUrl: speakerImageUrl == null ? null : String(speakerImageUrl),
-      nameColor: nameColor == null ? null : String(nameColor),
     };
 
     if (dice && typeof dice === "object") {

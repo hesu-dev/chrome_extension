@@ -27,10 +27,12 @@
     };
   }
 
-  function parseCoc1DicePayload(html) {
+  function parseCoc1DicePayload(html, template) {
     const { normalizeText, stripHtmlTags, collectTemplateValueCells, extractFirstInteger } = parserUtils;
     const safeHtml = String(html || "");
-    if (!/\bsheet-rolltemplate-coc-1\b/i.test(safeHtml)) return null;
+    const normalizedTemplate = String(template || "").toLowerCase();
+    const allowedTemplates = new Set(["coc-1", "coc-default"]);
+    if (!allowedTemplates.has(normalizedTemplate)) return null;
 
     const captionMatch = safeHtml.match(/<caption[^>]*>([\s\S]*?)<\/caption>/i);
     const captionText = normalizeText(stripHtmlTags(captionMatch?.[1] || ""));
@@ -231,8 +233,35 @@
     };
   }
 
+  function parseCocBonusPayload(html, template) {
+    const { extractCaptionText, collectTemplateRowsWithCells, extractAllIntegers, extractFirstInteger } =
+      parserUtils;
+    if (String(template || "").toLowerCase() !== "coc-bonus") return null;
+    const safeHtml = String(html || "");
+    const skill = extractCaptionText(safeHtml);
+    const rows = collectTemplateRowsWithCells(safeHtml);
+    const successRow = rows.find((row) => /기준치|value/i.test(String(row.label || "")));
+    const rollRow = rows.find((row) => /굴림|rolled/i.test(String(row.label || "")));
+    const success = extractFirstInteger(successRow?.value || "");
+    const rolls = extractAllIntegers(rollRow?.value || "");
+    if (!Number.isFinite(success) || !rolls.length) return null;
+    const inputs = { success, rolls };
+    if (skill) inputs.skill = skill;
+
+    return {
+      v: 1,
+      source: "roll20",
+      rule: "coc7",
+      template: "coc",
+      inputs,
+    };
+  }
+
   function parseCocRulePayload({ html, template }) {
-    if (template === "coc-1") return parseCoc1DicePayload(html);
+    if (template === "coc-1" || template === "coc-default") {
+      return parseCoc1DicePayload(html, template);
+    }
+    if (template === "coc-bonus") return parseCocBonusPayload(html, template);
     if (template === "coc") return parseCocPayload(html, template);
     if (template === "coc-attack") return parseCocAttackPayload(html, template);
     if (template === "coc-attack-1") return parseCocAttackOnePayload(html, template);
