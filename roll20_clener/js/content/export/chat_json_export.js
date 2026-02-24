@@ -53,7 +53,6 @@
     );
     if (cocLikeMatch) {
       return {
-        v: 1,
         source: "roll20",
         rule: "coc7",
         template: "coc-text",
@@ -147,6 +146,17 @@
     return `${meridiem} ${hour}:${minute}`;
   }
 
+  function formatTextColor(rawColor) {
+    const value = String(rawColor || "").trim();
+    if (!value) return "";
+    const normalized = value.replace(/;+\s*$/g, "").trim();
+    if (!normalized) return "";
+    if (/^color\s*:/i.test(normalized)) {
+      return normalized.replace(/\s*:\s*/i, ": ").trim();
+    }
+    return `color: ${normalized}`;
+  }
+
   function omitNullishDeep(value) {
     if (value == null) return undefined;
 
@@ -166,6 +176,54 @@
     }
 
     return value;
+  }
+
+  function removeLegacyVersionFieldDeep(value) {
+    if (value == null) return value;
+    if (Array.isArray(value)) {
+      return value.map((item) => removeLegacyVersionFieldDeep(item));
+    }
+    if (typeof value === "object") {
+      const result = {};
+      Object.entries(value).forEach(([key, val]) => {
+        if (key === "v") return;
+        result[key] = removeLegacyVersionFieldDeep(val);
+      });
+      return result;
+    }
+    return value;
+  }
+
+  function inferRuleTypeFromLines(lines) {
+    const list = Array.isArray(lines) ? lines : [];
+    for (const line of list) {
+      const rule = String(line?.input?.dice?.rule || "")
+        .trim()
+        .toLowerCase();
+      if (!rule) continue;
+      if (rule.includes("insane")) return "Insane";
+      if (rule.includes("coc")) return "COC";
+    }
+    return "";
+  }
+
+  function buildChatJsonDocument({ scenarioTitle = "", lines = [] } = {}) {
+    return {
+      schemaVersion: 1,
+      ebookView: {
+        titlePage: {
+          scenarioTitle: String(scenarioTitle || ""),
+          ruleType: inferRuleTypeFromLines(lines),
+          gm: "",
+          pl: "",
+          writer: "",
+          copyright: "",
+          identifier: "",
+          extraMetaItems: [],
+        },
+      },
+      lines: Array.isArray(lines) ? lines : [],
+    };
   }
 
   function buildChatJsonEntry({
@@ -188,21 +246,23 @@
               .replace(/\s+/g, " ")
               .trim();
     const normalizedText = String(text || "");
+    const rawInput = {};
+    if (imageUrl != null) rawInput.imageUrl = String(imageUrl);
+    if (speakerImageUrl != null) rawInput.speakerImageUrl = String(speakerImageUrl);
+    if (dice && typeof dice === "object") {
+      rawInput.dice = removeLegacyVersionFieldDeep(dice);
+    }
+    const input = omitNullishDeep(rawInput) || {};
     const entry = {
       id: String(id || ""),
       speaker: String(speaker || ""),
       role: String(role || "character"),
       timestamp: formatTimestampToKoreanMeridiem(timestamp),
-      textColor: String(textColor || "").trim(),
+      textColor: formatTextColor(textColor),
       text: normalizedText,
       safetext: safeTextBuilder(normalizedText),
-      imageUrl: imageUrl == null ? null : String(imageUrl),
-      speakerImageUrl: speakerImageUrl == null ? null : String(speakerImageUrl),
+      input,
     };
-
-    if (dice && typeof dice === "object") {
-      entry.dice = dice;
-    }
 
     return omitNullishDeep(entry);
   }
@@ -215,6 +275,7 @@
     normalizeImgurLinksInJsonText,
     resolveMessageId,
     collectJsonExportMessages,
+    buildChatJsonDocument,
     buildChatJsonEntry,
   };
 

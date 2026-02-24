@@ -650,7 +650,9 @@ function bindUiEvents() {
   });
 
   downloadTest2El.addEventListener("click", loadAvatarMappingsForEditor);
-  downloadAvatarMappedHtmlEl.addEventListener("click", runAvatarMappedHtmlDownload);
+  if (downloadAvatarMappedHtmlEl) {
+    downloadAvatarMappedHtmlEl.addEventListener("click", runAvatarMappedHtmlDownload);
+  }
   downloadAvatarMappedJsonEl.addEventListener("click", runAvatarMappedJsonDownload);
 
   window.addEventListener("unload", () => {
@@ -696,7 +698,7 @@ function bindRuntimeEvents() {
 
 function hydrateInitialState() {
   chrome.storage.sync.get(
-    { colorFilterEnabled: false, hiddenTextEnabled: false, targetColor: "#aaaaaa" },
+    { colorFilterEnabled: false, hiddenTextEnabled: false, targetColor: "color: #aaaaaa" },
     ({ colorFilterEnabled, hiddenTextEnabled, targetColor }) => {
       colorFilterEnabledEl.checked = colorFilterEnabled;
       hiddenTextEnabledEl.checked = hiddenTextEnabled;

@@ -31,7 +31,7 @@
   const settings = {
     colorFilterEnabled: false,
     hiddenTextEnabled: false,
-    targetColor: "#aaaaaa",
+    targetColor: "color: #aaaaaa",
     styleQuery: null,
   };
 
@@ -138,52 +138,27 @@
     return spans[2];
   }
 
-  function isStyleValueMatch(actualValue, expectedValue, key) {
-    const { normalizeColor } = getStyle();
-
-    if (!actualValue) return false;
-    const actual = String(actualValue).trim().toLowerCase();
-    const expected = String(expectedValue).trim().toLowerCase();
-
-    if (key === "color") {
-      const actualColor = normalizeColor ? normalizeColor(actual) : actual;
-      const expectedColor = normalizeColor ? normalizeColor(expected) : expected;
-      return !!actualColor && !!expectedColor && actualColor === expectedColor;
-    }
-
-    if (key === "opacity") {
-      const actualNum = Number.parseFloat(actual);
-      const expectedNum = Number.parseFloat(expected);
-      if (Number.isFinite(actualNum) && Number.isFinite(expectedNum)) {
-        return Math.abs(actualNum - expectedNum) < 0.001;
-      }
-    }
-
-    return actual === expected;
-  }
-
   function hasMatchingStyleInMessage(messageEl) {
     if (!settings.styleQuery) return false;
-    const { key, value } = settings.styleQuery;
+
+    const hasAnyTargetStyle = (styleText) => {
+      const inline = String(styleText || "");
+      if (!inline) return false;
+      const color = getInlineStyleValue(inline, "color");
+      if (color) return true;
+      const opacity = getInlineStyleValue(inline, "opacity");
+      return !!opacity;
+    };
 
     const thirdSpan = getTargetSpan(messageEl);
-    if (thirdSpan) {
-      const computed = getComputedStyle(thirdSpan);
-      const computedValue = computed.getPropertyValue(key);
-      if (isStyleValueMatch(computedValue, value, key)) return true;
+    if (thirdSpan && hasAnyTargetStyle(thirdSpan.getAttribute?.("style"))) {
+      return true;
     }
 
     const styledNodes = messageEl.querySelectorAll("[style]");
     for (const node of styledNodes) {
       const inlineStyle = node.getAttribute("style") || "";
-      const inlineValue = getInlineStyleValue(inlineStyle, key);
-      if (inlineValue && isStyleValueMatch(inlineValue, value, key)) {
-        return true;
-      }
-
-      const computed = getComputedStyle(node);
-      const actualValue = computed.getPropertyValue(key);
-      if (isStyleValueMatch(actualValue, value, key)) {
+      if (hasAnyTargetStyle(inlineStyle)) {
         return true;
       }
     }
@@ -698,6 +673,7 @@
     const {
       resolveMessageId,
       buildChatJsonEntry,
+      buildChatJsonDocument,
       parseRoll20DicePayload,
       collectJsonExportMessages,
       normalizeImgurLinksInJsonText,
@@ -718,12 +694,33 @@
             "이미지 링크": imageUrl,
             "스피커": speaker,
             timestamp: String(timestamp || ""),
-            textColor: String(textColor || ""),
+            textColor: String(textColor || "").trim()
+              ? `color: ${String(textColor || "").trim().replace(/^color\s*:\s*/i, "")}`
+              : "",
             text,
             safetext: String(text || "")
               .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")
               .replace(/\s+/g, " ")
               .trim(),
+          });
+    const safeBuildChatJsonDocument =
+      typeof buildChatJsonDocument === "function"
+        ? buildChatJsonDocument
+        : ({ scenarioTitle = "", lines = [] }) => ({
+            schemaVersion: 1,
+            ebookView: {
+              titlePage: {
+                scenarioTitle: String(scenarioTitle || ""),
+                ruleType: "",
+                gm: "",
+                pl: "",
+                writer: "",
+                copyright: "",
+                identifier: "",
+                extraMetaItems: [],
+              },
+            },
+            lines: Array.isArray(lines) ? lines : [],
           });
 
     const maps =
@@ -818,7 +815,11 @@
       });
     });
 
-    const jsonText = JSON.stringify(rows, null, 2);
+    const exportDocument = safeBuildChatJsonDocument({
+      scenarioTitle: extractCampaignNameFromHref(),
+      lines: rows,
+    });
+    const jsonText = JSON.stringify(exportDocument, null, 2);
     if (typeof normalizeImgurLinksInJsonText === "function") {
       return normalizeImgurLinksInJsonText(jsonText);
     }
@@ -828,7 +829,7 @@
   // --- Initialization ---
 
   chrome.storage.sync.get(
-    { colorFilterEnabled: false, hiddenTextEnabled: false, targetColor: "#aaaaaa" },
+    { colorFilterEnabled: false, hiddenTextEnabled: false, targetColor: "color: #aaaaaa" },
     refreshSettings
   );
 

@@ -28,7 +28,6 @@
     if (!skill || !Number.isFinite(target) || !Number.isFinite(roll)) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "insane",
       template: "insane-dice",
@@ -57,7 +56,6 @@
     if (!skill || !Number.isFinite(target) || !Number.isFinite(roll)) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "insane",
       template: "insane-dice",
@@ -95,7 +93,6 @@
     if (!type || !title || !detail) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "insane",
       template: "ability",
@@ -121,7 +118,6 @@
     const emotionTitle = normalizeText(stripHtmlTags(emotionMatch?.[1] || ""));
     if (emotionTitle) {
       return {
-        v: 1,
         source: "roll20",
         rule: "insane",
         template: "emotion",
@@ -149,7 +145,6 @@
 
     if (type && title && detail) {
       return {
-        v: 1,
         source: "roll20",
         rule: "insane",
         template: "item",
@@ -171,7 +166,6 @@
     if (!singleTitleRaw || !detail) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "insane",
       template: "scene-table",
@@ -217,7 +211,6 @@
     if (!title || !skill) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "insane",
       template: "dice",

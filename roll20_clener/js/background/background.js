@@ -3,7 +3,7 @@ chrome.runtime.onInstalled.addListener(() => {
     {
       colorFilterEnabled: false,
       hiddenTextEnabled: false,
-      targetColor: "#aaaaaa",
+      targetColor: "color: #aaaaaa",
     },
     (values) => {
       chrome.storage.sync.set(values);

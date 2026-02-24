@@ -19,7 +19,6 @@
     });
 
     return {
-      v: 1,
       source: "roll20",
       rule: "table",
       template: "default",
@@ -44,7 +43,6 @@
     if (!skill || !Number.isFinite(success) || !Number.isFinite(roll)) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: "coc-1",
@@ -64,7 +62,6 @@
     if (!title || !rows.length) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: String(template),
@@ -86,7 +83,6 @@
     if (!title || !label) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: "coc-init-stc",
@@ -105,7 +101,6 @@
     if (!caption || !Number.isFinite(value)) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: "coc-defence-2",
@@ -147,7 +142,6 @@
     }
 
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: normalizedTemplate,
@@ -183,7 +177,6 @@
 
     if (!skill || !Number.isFinite(success) || !rollNumbers.length || !Number.isFinite(damage)) return null;
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: "coc-attack",
@@ -205,7 +198,6 @@
 
     if (!skill || !Number.isFinite(success) || !Number.isFinite(damage)) return null;
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: "coc-attack-1",
@@ -225,7 +217,6 @@
     if (!skill || !Number.isFinite(success) || !rolls.length) return null;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: "coc",
@@ -249,7 +240,6 @@
     if (skill) inputs.skill = skill;
 
     return {
-      v: 1,
       source: "roll20",
       rule: "coc7",
       template: "coc",
