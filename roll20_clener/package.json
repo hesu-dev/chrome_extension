@@ -1,0 +1,15 @@
+{
+  "name": "roll20-clener-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Build tooling for Roll20 cleaner Chrome extension",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "chokidar \"manifest.json\" \"popup.html\" \"css/**/*\" \"js/**/*\" -c \"npm run build\"",
+    "zip": "node scripts/zip.mjs",
+    "build:release": "npm run build && npm run zip"
+  },
+  "devDependencies": {
+    "chokidar-cli": "^3.0.0"
+  }
+}
