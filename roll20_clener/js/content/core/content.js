@@ -689,20 +689,35 @@
     const safeBuildChatJsonEntry =
       typeof buildChatJsonEntry === "function"
         ? buildChatJsonEntry
-        : ({ id, imageUrl, speaker, text, timestamp, textColor }) => ({
-            id,
-            "이미지 링크": imageUrl,
-            "스피커": speaker,
-            timestamp: String(timestamp || ""),
-            textColor: String(textColor || "").trim()
-              ? `color: ${String(textColor || "").trim().replace(/^color\s*:\s*/i, "")}`
-              : "",
-            text,
-            safetext: String(text || "")
-              .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")
-              .replace(/\s+/g, " ")
-              .trim(),
-          });
+        : ({ id, imageUrl, speaker, role, text, timestamp, textColor, speakerImageUrl, dice }) => {
+            const normalizedColor = String(textColor || "").trim();
+            const url = String(speakerImageUrl || "").trim();
+            const input = {};
+            if (imageUrl) input.imageUrl = imageUrl;
+            if (url) {
+              input.speakerImages = {
+                avatar: {
+                  url,
+                },
+              };
+            }
+            if (dice && typeof dice === "object") input.dice = dice;
+            return {
+              id: String(id || ""),
+              speaker: String(speaker || ""),
+              role: String(role || "character"),
+              timestamp: String(timestamp || ""),
+              textColor: normalizedColor
+                ? `color: ${normalizedColor.replace(/^color\s*:\s*/i, "")}`
+                : "",
+              text: String(text || ""),
+              safetext: String(text || "")
+                .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")
+                .replace(/\s+/g, " ")
+                .trim(),
+              input,
+            };
+          };
     const safeBuildChatJsonDocument =
       typeof buildChatJsonDocument === "function"
         ? buildChatJsonDocument

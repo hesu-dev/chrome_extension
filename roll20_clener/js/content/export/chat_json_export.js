@@ -157,6 +157,16 @@
     return `color: ${normalized}`;
   }
 
+  function buildSpeakerImages(speakerImageUrl) {
+    const url = String(speakerImageUrl || "").trim();
+    if (!url) return undefined;
+    return {
+      avatar: {
+        url,
+      },
+    };
+  }
+
   function omitNullishDeep(value) {
     if (value == null) return undefined;
 
@@ -248,7 +258,8 @@
     const normalizedText = String(text || "");
     const rawInput = {};
     if (imageUrl != null) rawInput.imageUrl = String(imageUrl);
-    if (speakerImageUrl != null) rawInput.speakerImageUrl = String(speakerImageUrl);
+    const speakerImages = buildSpeakerImages(speakerImageUrl);
+    if (speakerImages) rawInput.speakerImages = speakerImages;
     if (dice && typeof dice === "object") {
       rawInput.dice = removeLegacyVersionFieldDeep(dice);
     }
