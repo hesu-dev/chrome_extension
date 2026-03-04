@@ -1,0 +1,360 @@
+/* 나를 제외하고 coc 문법만. */
+.general {
+  box-sizing: content-box;
+  padding-left: 45px;
+  padding-right: 16px;
+  padding-bottom: 7px;
+  background-color: rgb(241, 241, 241);
+  position: relative;
+  color: rgb(51, 51, 51);
+  font-family: "Proxima Nova", ProximaNova-Regular, -apple-system, "system-ui", "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  font-size: 13.65px;
+  font-style: normal;
+  font-variant-ligatures: normal;
+  font-variant-caps: normal;
+  font-weight: 400;
+  letter-spacing: normal;
+  orphans: 2;
+  text-align: start;
+  text-indent: 0px;
+  text-transform: none;
+  widows: 2;
+  word-spacing: 0px;
+  -webkit-text-stroke-width: 0px;
+  white-space: normal;
+  text-decoration-thickness: initial;
+  text-decoration-style: initial;
+  text-decoration-color: initial;
+}
+
+.message {
+  box-sizing: content-box;
+  padding-left: 45px;
+  padding-right: 16px;
+  padding-bottom: 7px;
+  background-color: rgb(241, 241, 241);
+  position: relative;
+  color: rgb(51, 51, 51);
+  /* font-family: &quot;
+  Proxima Nova&quot;
+
+  ProximaNova-Regular,
+  -apple-system,
+  &quot;
+  system-ui&quot;
+  ,
+  &quot;
+  Segoe UI&quot;
+  ,
+  Roboto,
+  Oxygen-Sans,
+  Ubuntu,
+  Cantarell,
+  &quot;
+  Helvetica Neue&quot;
+  ,
+  sans-serif; */
+  font-size: 13.65px;
+  font-style: normal;
+  font-variant-ligatures: normal;
+  font-variant-caps: normal;
+  font-weight: 400;
+  letter-spacing: normal;
+  orphans: 2;
+  text-align: start;
+  text-indent: 0px;
+  text-transform: none;
+  widows: 2;
+  word-spacing: 0px;
+  -webkit-text-stroke-width: 0px;
+  white-space: normal;
+  text-decoration-thickness: initial;
+  text-decoration-style: initial;
+  text-decoration-color: initial;
+}
+
+.textchatcontainer .message {
+  padding-left: 45px;
+  padding-right: 16px;
+  padding-bottom: 7px;
+  background-color: #f1f1f1;
+  position: relative;
+}
+
+.textchatcontainer .avatar {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 28px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: content-box;
+}
+
+.textchatcontainer .content {
+  line-height: 1.25em;
+  font-size: 1.05em;
+  word-wrap: break-word;
+}
+
+.css-1097zx0 .message {
+  position: relative;
+}
+
+user agent stylesheet div {
+  display: block;
+  unicode-bidi: isolate;
+}
+
+.spacer {
+  box-sizing: content-box;
+  background-color: rgb(225, 225, 225);
+  height: 2px;
+  margin-bottom: 7px;
+  margin-left: -45px;
+  margin-right: -12px;
+}
+
+
+.avater {
+  box-sizing: content-box;
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 28px;
+}
+
+.textchatcontainer .avatar img {
+  max-width: 28px;
+  max-height: 28px;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+img {
+  vertical-align: middle;
+}
+
+img {
+  border: 0;
+}
+
+.textchatcontainer .by {
+  font-weight: bold;
+  position: relative;
+  left: -5px;
+}
+
+.textchatcontainer .message .tstamp {
+  display: none;
+}
+
+
+
+.sheet-rolltemplate-coc-bonus table,
+.sheet-rolltemplate-coc-default table,
+.sheet-rolltemplate-coc-bomadness-summ table,
+.sheet-rolltemplate-coc-bomadness-rt table,
+.sheet-rolltemplate-coc-dice-roll table,
+.sheet-rolltemplate-coc-body-hit-loc table,
+.sheet-rolltemplate-coc-attack table,
+.sheet-rolltemplate-coc-attack-bonus table,
+.sheet-rolltemplate-coc-spell-roll table,
+.sheet-rolltemplate-coc-defence-simple table,
+.sheet-rolltemplate-coc-minionattack table,
+.sheet-rolltemplate-coc-vehicleattack table {
+  width: 100%;
+  border: 1px solid black;
+  color: black;
+  background: #FFFFFF;
+}
+
+table {
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.sheet-rolltemplate-coc-bonus td,
+.sheet-rolltemplate-coc-default td,
+.sheet-rolltemplate-coc-bomadness-summ td,
+.sheet-rolltemplate-coc-bomadness-rt td,
+.sheet-rolltemplate-coc-dice-roll td,
+.sheet-rolltemplate-coc-attack td,
+.sheet-rolltemplate-coc-attack-bonus td,
+.sheet-rolltemplate-coc-defence-simple td,
+.sheet-rolltemplate-coc-minionattack td,
+.sheet-rolltemplate-coc-vehicleattack td {
+  padding: 2px;
+  border-bottom: 1px solid black;
+}
+
+.sheet-rolltemplate-coc-bonus caption,
+.sheet-rolltemplate-coc-default caption,
+.sheet-rolltemplate-coc-bomadness-summ caption,
+.sheet-rolltemplate-coc-bomadness-rt caption,
+.sheet-rolltemplate-coc-dice-roll caption,
+.sheet-rolltemplate-coc-body-hit-loc caption,
+.sheet-rolltemplate-coc-attack caption,
+.sheet-rolltemplate-coc-attack-bonus caption,
+.sheet-rolltemplate-coc-spell-roll caption,
+.sheet-rolltemplate-coc-defence-simple caption,
+.sheet-rolltemplate-coc-minionattack caption,
+.sheet-rolltemplate-coc-vehicleattack caption {
+  text-align: center;
+  background: black;
+  color: white;
+  font-weight: bold;
+  padding: 2px;
+  border: 1px solid black;
+  line-height: 1.6em;
+}
+
+.sheet-rolltemplate-coc-bonus .inlinerollresult,
+.sheet-rolltemplate-coc-default .inlinerollresult,
+.sheet-rolltemplate-coc-bomadness-summ .inlinerollresult,
+.sheet-rolltemplate-coc-bomadness-rt .inlinerollresult,
+.sheet-rolltemplate-coc-dice-roll .inlinerollresult,
+.sheet-rolltemplate-coc-body-hit-loc .inlinerollresult,
+.sheet-rolltemplate-coc-attack .inlinerollresult,
+.sheet-rolltemplate-coc-attack-bonus .inlinerollresult,
+.sheet-rolltemplate-coc-spell-roll .inlinerollresult,
+.sheet-rolltemplate-coc-defence-simple .inlinerollresult,
+.sheet-rolltemplate-coc-minionattack .inlinerollresult,
+.sheet-rolltemplate-coc-vehicleattack .inlinerollresult {
+  display: inline-block;
+  min-width: 1.5em;
+  text-align: center;
+  border: 2px solid black;
+  background: #BEBEBE;
+}
+
+.sheet-rolltemplate-coc-bonus td.sheet-template_value,
+.sheet-rolltemplate-coc-default td.sheet-template_value,
+.sheet-rolltemplate-coc-dice-roll td.sheet-template_value,
+.sheet-rolltemplate-coc-body-hit-loc td.sheet-template_value,
+.sheet-rolltemplate-coc-attack td.sheet-template_value,
+.sheet-rolltemplate-coc-attack-bonus td.sheet-template_value,
+.sheet-rolltemplate-coc-spell-roll td.sheet-template_value,
+.sheet-rolltemplate-coc-bomadness-rt td.sheet-template_value,
+.sheet-rolltemplate-coc-bomadness-summ td.sheet-template_value,
+.sheet-rolltemplate-coc-defence-simple td.sheet-template_value,
+.sheet-rolltemplate-coc-minionattack td.sheet-template_value,
+.sheet-rolltemplate-coc-vehicleattack td.sheet-template_value {
+  text-align: center;
+}
+
+.inlinerollresult,
+.sheet-rolltemplate-coc-default .inlinerollresult,
+.sheet-rolltemplate-coc-bomadness-summ .inlinerollresult,
+.sheet-rolltemplate-coc-bomadness-rt .inlinerollresult,
+.sheet-rolltemplate-coc-dice-roll .inlinerollresult,
+.sheet-rolltemplate-coc-body-hit-loc .inlinerollresult,
+.sheet-rolltemplate-coc-attack .inlinerollresult,
+.sheet-rolltemplate-coc-attack-bonus .inlinerollresult,
+.sheet-rolltemplate-coc-spell-roll .inlinerollresult,
+.sheet-rolltemplate-coc-defence-simple .inlinerollresult,
+.sheet-rolltemplate-coc-minionattack .inlinerollresult,
+.sheet-rolltemplate-coc-vehicleattack .inlinerollresult {
+  display: inline-block;
+  min-width: 1.5em;
+  text-align: center;
+  border: 2px solid black;
+  background: #BEBEBE;
+}
+
+.textchatcontainer .message.desc {
+  padding-left: 15px;
+}
+
+.textchatcontainer .desc {
+  font-style: italic;
+  font-weight: bold;
+  text-align: center;
+}
+
+.textchatcontainer .desc .avatar,
+.textchatcontainer .desc .by {
+  display: none;
+}
+
+.sheet-rolltemplate-coc caption {
+  text-align: center;
+  background: black;
+  color: white;
+  font-weight: bold;
+  padding: 2px;
+  border: 1px solid black;
+  line-height: 1.6em;
+}
+
+.sheet-rolltemplate-coc-1 table {
+  width: 100%;
+  border: 1px solid black;
+  color: black;
+  background: #FFFFFF;
+}
+
+
+
+*,
+*::before,
+*::after {
+  box-sizing: content-box;
+}
+
+* {
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+tbody {
+  display: table-row-group;
+  vertical-align: middle;
+  unicode-bidi: isolate;
+  border-color: inherit;
+}
+
+table {
+  display: table;
+  border-collapse: separate;
+  box-sizing: border-box;
+  text-indent: initial;
+  unicode-bidi: isolate;
+  border-spacing: 2px;
+  border-color: gray;
+}
+
+table {
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+table {
+  background-color: transparent;
+}
+
+.sheet-rolltemplate-coc td.sheet-template_value {
+  text-align: center;
+}
+
+.sheet-rolltemplate-coc td {
+  padding: 2px;
+  border-bottom: 1px solid black;
+}
+
+
+.sheet-rolltemplate-default caption {
+  background-color: rgba(112, 32, 130, 1);
+  color: white;
+  font-family: "Helvetica Neue", Helvetica, sans-serif;
+  font-weight: 300;
+  font-size: 1.1em;
+  padding: 5px;
+}

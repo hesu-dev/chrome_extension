@@ -58,7 +58,7 @@
         template: "coc-text",
         inputs: {
           skill: safeNormalize(cocLikeMatch[1] || ""),
-          success: Number(cocLikeMatch[2]),
+          target: Number(cocLikeMatch[2]),
           roll: Number(cocLikeMatch[3]),
           result: safeNormalize(cocLikeMatch[4] || "") || null,
         },

@@ -38,15 +38,15 @@
     const skill = captionText.replace(/\s+roll\s*$/i, "").trim();
 
     const cells = collectTemplateValueCells(safeHtml);
-    const success = extractFirstInteger(cells[0] || "");
+    const target = extractFirstInteger(cells[0] || "");
     const roll = extractFirstInteger(cells[1] || "");
-    if (!skill || !Number.isFinite(success) || !Number.isFinite(roll)) return null;
+    if (!skill || !Number.isFinite(target) || !Number.isFinite(roll)) return null;
 
     return {
       source: "roll20",
       rule: "coc7",
       template: "coc-1",
-      inputs: { skill, roll, success },
+      inputs: { skill, roll, target },
     };
   }
 
@@ -170,17 +170,17 @@
     const rollRow = rows.find((row) => /굴림|rolled/i.test(String(row.label || "")));
     const damageRow = rows.find((row) => /피해|dam/i.test(String(row.label || "")));
 
-    const success = extractFirstInteger(successRow?.value || "");
+    const target = extractFirstInteger(successRow?.value || "");
     const rollNumbers = extractAllIntegers(rollRow?.value || "");
     const damage = extractFirstInteger(damageRow?.value || "");
     const skill = mapAttackSkill(caption);
 
-    if (!skill || !Number.isFinite(success) || !rollNumbers.length || !Number.isFinite(damage)) return null;
+    if (!skill || !Number.isFinite(target) || !rollNumbers.length || !Number.isFinite(damage)) return null;
     return {
       source: "roll20",
       rule: "coc7",
       template: "coc-attack",
-      inputs: { skill, success, rolls: rollNumbers, damage },
+      inputs: { skill, target, rolls: rollNumbers, damage },
     };
   }
 
@@ -193,15 +193,15 @@
 
     const successRow = rows.find((row) => /기준치|value/i.test(String(row.label || "")));
     const damageRow = rows.find((row) => /피해|dam/i.test(String(row.label || "")));
-    const success = extractFirstInteger(successRow?.value || "");
+    const target = extractFirstInteger(successRow?.value || "");
     const damage = extractFirstInteger(damageRow?.value || "");
 
-    if (!skill || !Number.isFinite(success) || !Number.isFinite(damage)) return null;
+    if (!skill || !Number.isFinite(target) || !Number.isFinite(damage)) return null;
     return {
       source: "roll20",
       rule: "coc7",
       template: "coc-attack-1",
-      inputs: { skill, success, rolls: [success], damage },
+      inputs: { skill, target, rolls: [target], damage },
     };
   }
 
@@ -213,14 +213,14 @@
     const rows = collectTemplateRowsWithCells(safeHtml);
     const rollRow = rows.find((row) => /굴림|rolled/i.test(String(row.label || "")));
     const rolls = extractAllIntegers(rollRow?.value || "");
-    const success = rolls.length ? rolls[0] : null;
-    if (!skill || !Number.isFinite(success) || !rolls.length) return null;
+    const target = rolls.length ? rolls[0] : null;
+    if (!skill || !Number.isFinite(target) || !rolls.length) return null;
 
     return {
       source: "roll20",
       rule: "coc7",
       template: "coc",
-      inputs: { skill, success, rolls },
+      inputs: { skill, target, rolls },
     };
   }
 
@@ -233,10 +233,10 @@
     const rows = collectTemplateRowsWithCells(safeHtml);
     const successRow = rows.find((row) => /기준치|value/i.test(String(row.label || "")));
     const rollRow = rows.find((row) => /굴림|rolled/i.test(String(row.label || "")));
-    const success = extractFirstInteger(successRow?.value || "");
+    const target = extractFirstInteger(successRow?.value || "");
     const rolls = extractAllIntegers(rollRow?.value || "");
-    if (!Number.isFinite(success) || !rolls.length) return null;
-    const inputs = { success, rolls };
+    if (!Number.isFinite(target) || !rolls.length) return null;
+    const inputs = { target, rolls };
     if (skill) inputs.skill = skill;
 
     return {

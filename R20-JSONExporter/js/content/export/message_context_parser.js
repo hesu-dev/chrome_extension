@@ -13,14 +13,17 @@
     const normalizedSpeaker = normalizeSpeakerName(now.speaker || "");
     const currentAvatarSrc = String(now.avatarSrc || "").trim();
     const currentSpeakerImageUrl = String(now.speakerImageUrl || "").trim();
+    const currentTimestamp = String(now.timestamp || "").replace(/\s+/g, " ").trim();
     const inheritedAvatarSrc = currentAvatarSrc || String(prev.avatarSrc || "");
     const inheritedSpeakerImageUrl =
       currentSpeakerImageUrl || String(prev.speakerImageUrl || "") || inheritedAvatarSrc;
+    const inheritedTimestamp = currentTimestamp || String(prev.timestamp || "");
 
     return {
       speaker: normalizedSpeaker || String(prev.speaker || ""),
       avatarSrc: inheritedAvatarSrc,
       speakerImageUrl: inheritedSpeakerImageUrl,
+      timestamp: inheritedTimestamp,
     };
   }
 

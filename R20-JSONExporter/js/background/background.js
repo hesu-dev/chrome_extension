@@ -23,6 +23,21 @@ function arrayBufferToBase64(buffer) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "GET_EXTENSION_BASE_CSS_TEXT") {
+    const targetUrl = chrome.runtime.getURL("css/base.css");
+    fetch(targetUrl, { method: "GET", cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        sendResponse({ ok: true, text });
+      })
+      .catch((err) => {
+        console.error("Read extension base.css failed:", err);
+        sendResponse({ ok: false, text: "" });
+      });
+    return true;
+  }
+
   if (message?.type === "RESOLVE_REDIRECT_URL") {
     const targetUrl = message?.url;
     if (!targetUrl || typeof targetUrl !== "string") {

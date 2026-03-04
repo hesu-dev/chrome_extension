@@ -124,6 +124,7 @@ function injectContentScript(tabId) {
           "js/shared/performance_utils.js",
           "js/content/avatar/avatar_rules.js",
           "js/content/export/html_chunk_serializer.js",
+          "js/content/export/archive_html_sanitizer.js",
           "js/content/export/message_context_parser.js",
           "js/content/avatar/avatar_processor.js",
           "js/content/export/parsers/parser_utils.js",

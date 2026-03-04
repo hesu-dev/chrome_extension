@@ -25,8 +25,10 @@
   const getData = () => window.Roll20CleanerData || {};
   const getRootState = () => window.Roll20CleanerRootState || {};
   const getPerf = () => window.Roll20CleanerPerf || {};
+  const getArchiveHtml = () => window.Roll20CleanerArchiveHtml || {};
 
   const TEST_HTML_BASE_BYTES = 13045405;
+  let archiveBaseCssTextPromise = null;
 
   const settings = {
     colorFilterEnabled: false,
@@ -34,6 +36,46 @@
     targetColor: "color: #aaaaaa",
     styleQuery: null,
   };
+
+  async function fetchExtensionText(path) {
+    const url = chrome.runtime.getURL(path);
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Failed to load ${path}: ${response.status}`);
+    }
+    return response.text();
+  }
+
+  function requestBaseCssTextFromBackground() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "GET_EXTENSION_BASE_CSS_TEXT" }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve("");
+          return;
+        }
+        if (!response?.ok) {
+          resolve("");
+          return;
+        }
+        resolve(String(response.text || ""));
+      });
+    });
+  }
+
+  async function getArchiveBaseCssText() {
+    if (!archiveBaseCssTextPromise) {
+      archiveBaseCssTextPromise = (async () => {
+        try {
+          const direct = await fetchExtensionText("css/base.css");
+          if (direct && direct.trim()) return direct;
+        } catch (error) {
+          console.warn("[Roll20Cleaner] Failed to load css/base.css directly:", error);
+        }
+        return requestBaseCssTextFromBackground();
+      })();
+    }
+    return archiveBaseCssTextPromise;
+  }
 
   // --- Filtering Logic (Specific to content.js state) ---
 
@@ -342,6 +384,17 @@
     return html;
   }
 
+  function removeArchiveFooterArtifacts(cloneRoot) {
+    if (!cloneRoot || typeof cloneRoot.querySelectorAll !== "function") return;
+    const selectors = [
+      "#dicerollerdialog",
+      "#monica-content-root",
+    ];
+    selectors.forEach((selector) => {
+      cloneRoot.querySelectorAll(selector).forEach((node) => node.remove());
+    });
+  }
+
   async function buildVisibleHtmlCore({
     requestId = "",
     includeScripts = false,
@@ -401,6 +454,7 @@
     removeSheetTemplateAreaNewlines(clone);
     removeNonSingleFileAttrs(clone);
     repeatCollapsedMessageMeta(clone);
+    removeArchiveFooterArtifacts(clone);
     report(60, "리소스 정리 중...");
 
     if (withAvatarReplacements && applyAvatarReplacementsToClone) {
@@ -418,7 +472,13 @@
 
     report(90, "HTML 파일 준비 중...");
     const serializer = new XMLSerializer();
-    const html = appendDoctypeIfNeeded(serializer.serializeToString(clone));
+    const rawHtml = appendDoctypeIfNeeded(serializer.serializeToString(clone));
+    const { sanitizeArchiveExportHtml } = getArchiveHtml();
+    const inlineCssText = await getArchiveBaseCssText();
+    const html =
+      typeof sanitizeArchiveExportHtml === "function"
+        ? sanitizeArchiveExportHtml(rawHtml, { inlineCssText })
+        : rawHtml;
     const bytes = perf.getUtf8ByteLength ? perf.getUtf8ByteLength(html) : new TextEncoder().encode(html).length;
     const elapsedMs = Math.round(performance.now() - start);
     report(100, `완료 (${(bytes / (1024 * 1024)).toFixed(2)}MB, ${elapsedMs}ms)`);
@@ -459,22 +519,37 @@
     return result.html;
   }
 
-  function buildProfileImageReplacementChunks(replacements) {
+  async function buildProfileImageReplacementChunks(replacements) {
     const { applyAvatarReplacementsToClone } = getAvatar();
     const { serializeDocumentCloneToChunks } = getDom();
+    const { chunkString } = window.Roll20CleanerHtmlChunk || {};
+    const { sanitizeArchiveExportHtml } = getArchiveHtml();
     const clone = document.documentElement.cloneNode(true);
     removeHiddenPlaceholderMessages(clone);
     repeatCollapsedMessageMeta(clone);
+    removeArchiveFooterArtifacts(clone);
     if (applyAvatarReplacementsToClone) {
       applyAvatarReplacementsToClone(clone, replacements);
     }
     if (!serializeDocumentCloneToChunks) {
       throw new Error("serializeDocumentCloneToChunks 함수가 준비되지 않았습니다.");
     }
-    return serializeDocumentCloneToChunks(clone, {
+    const chunks = serializeDocumentCloneToChunks(clone, {
       doctypeName: document.doctype?.name || "",
       maxChunkSize: 1024 * 512,
     });
+
+    if (typeof sanitizeArchiveExportHtml !== "function") {
+      return chunks;
+    }
+
+    const joined = Array.isArray(chunks) ? chunks.join("") : "";
+    const inlineCssText = await getArchiveBaseCssText();
+    const sanitized = sanitizeArchiveExportHtml(joined, { inlineCssText });
+    if (typeof chunkString === "function") {
+      return chunkString(sanitized, 1024 * 512);
+    }
+    return [sanitized];
   }
 
   // --- Helper: Campaign Name ---
@@ -750,13 +825,14 @@
       typeof collectJsonExportMessages === "function"
         ? collectJsonExportMessages(document)
         : Array.from(document.querySelectorAll("div.message"));
-    let previousMessageContext = { speaker: "", avatarSrc: "", speakerImageUrl: "" };
+    let previousMessageContext = { speaker: "", avatarSrc: "", speakerImageUrl: "", timestamp: "" };
     const rows = messages.map((messageEl, index) => {
       const role =
         typeof resolveRoleForMessage === "function"
           ? resolveRoleForMessage(messageEl)
           : "character";
       const rawSpeaker = getMessageSpeakerName(messageEl);
+      const rawTimestamp = getMessageTimestamp(messageEl);
       const avatarImg = getMessageAvatarImage(messageEl);
       const rawCurrentSrc = (avatarImg?.getAttribute("src") || "").trim();
       const currentSrc = rawCurrentSrc ? safeToAbsoluteUrl(rawCurrentSrc) : "";
@@ -771,21 +847,30 @@
               hasAvatar,
             })
           : String(role || "").toLowerCase() !== "system";
-      const fallbackContext = canInherit ? previousMessageContext : { speaker: "", avatarSrc: "", speakerImageUrl: "" };
+      const fallbackContext = canInherit
+        ? previousMessageContext
+        : { speaker: "", avatarSrc: "", speakerImageUrl: "", timestamp: "" };
       const resolvedContext =
         typeof resolveMessageContext === "function"
           ? resolveMessageContext(
-              { speaker: rawSpeaker, avatarSrc: currentSrc, speakerImageUrl: currentSrc },
+              {
+                speaker: rawSpeaker,
+                avatarSrc: currentSrc,
+                speakerImageUrl: currentSrc,
+                timestamp: rawTimestamp,
+              },
               fallbackContext
             )
           : {
               speaker: rawSpeaker || fallbackContext.speaker || "",
               avatarSrc: currentSrc || fallbackContext.avatarSrc || "",
               speakerImageUrl: currentSrc || fallbackContext.speakerImageUrl || fallbackContext.avatarSrc || "",
+              timestamp: rawTimestamp || fallbackContext.timestamp || "",
             };
       const speaker = resolvedContext.speaker;
       const effectiveCurrentSrc = resolvedContext.avatarSrc;
       const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || effectiveCurrentSrc;
+      const effectiveTimestamp = String(resolvedContext.timestamp || "").replace(/\s+/g, " ").trim();
       const replacement =
         typeof findReplacementForMessage === "function"
           ? findReplacementForMessage(
@@ -800,6 +885,7 @@
           speaker,
           avatarSrc: effectiveCurrentSrc,
           speakerImageUrl: imageUrl || effectiveSpeakerImageUrl || "",
+          timestamp: effectiveTimestamp,
         };
       }
       const inlineImageUrl = getInlineMessageImageUrl(messageEl);
@@ -821,7 +907,7 @@
         id: safeResolveMessageId({ id: messageId }, index),
         speaker,
         role: roleForEntry,
-        timestamp: getMessageTimestamp(messageEl),
+        timestamp: effectiveTimestamp,
         textColor: getMessageTextColor(messageEl),
         text: extractMessageText(messageEl),
         imageUrl: inlineImageUrl,
@@ -1080,15 +1166,15 @@
     port.onMessage.addListener((message) => {
       if (message?.type !== "START_PROFILE_IMAGE_REPLACEMENT_DOWNLOAD") return;
 
-      const requestId = message?.requestId || "";
-      try {
+      (async () => {
+        const requestId = message?.requestId || "";
         port.postMessage({
           type: "STREAM_PROGRESS",
           requestId,
           percent: 10,
           label: "내용 복제 중입니다...",
         });
-        const chunks = buildProfileImageReplacementChunks(message?.replacements || []);
+        const chunks = await buildProfileImageReplacementChunks(message?.replacements || []);
         port.postMessage({
           type: "STREAM_PROGRESS",
           requestId,
@@ -1105,7 +1191,8 @@
           requestId,
           ok: true,
         });
-      } catch (error) {
+      })().catch((error) => {
+        const requestId = message?.requestId || "";
         console.error(error);
         port.postMessage({
           type: "STREAM_DONE",
@@ -1113,7 +1200,7 @@
           ok: false,
           errorMessage: toSimpleErrorMessage(error),
         });
-      }
+      });
     });
   });
 
