@@ -1,0 +1,279 @@
+const parserUtils = require("./parsers/parser_utils.js");
+const cocRuleParser = require("./parsers/coc_rule_parser.js");
+const insaneRuleParser = require("./parsers/insane_rule_parser.js");
+
+const HIDDEN_PLACEHOLDER_TEXT = "This message has been hidden";
+
+function isHiddenMessagePlaceholderText(raw) {
+  const normalized = String(raw || "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes(HIDDEN_PLACEHOLDER_TEXT.toLowerCase());
+}
+
+function normalizeMessageText(raw) {
+  return String(raw || "").replace(/\s+/g, " ").trim();
+}
+
+function parseRoll20DicePayload({ role, html }) {
+  const { extractTemplateName, stripHtmlTags, normalizeText } = parserUtils;
+  const template = extractTemplateName(html);
+  const parseCocDefaultPayload = cocRuleParser.parseCocDefaultPayload;
+  if (typeof parseCocDefaultPayload === "function") {
+    const defaultPayload = parseCocDefaultPayload({ html, template });
+    if (defaultPayload) return defaultPayload;
+  }
+  if (String(role || "").toLowerCase() !== "dice") return null;
+
+  const ruleParsers = [
+    insaneRuleParser.parseInsaneRulePayload,
+    cocRuleParser.parseCocRulePayload,
+  ].filter((fn) => typeof fn === "function");
+
+  for (const parseRulePayload of ruleParsers) {
+    const parsed = parseRulePayload({ html, template });
+    if (parsed) return parsed;
+  }
+
+  const safeNormalize = typeof normalizeText === "function" ? normalizeText : normalizeMessageText;
+  const safeStripTags =
+    typeof stripHtmlTags === "function"
+      ? stripHtmlTags
+      : (rawHtml) => String(rawHtml || "").replace(/<[^>]*>/g, " ");
+  const renderedText = safeNormalize(safeStripTags(html));
+  const cocLikeMatch = renderedText.match(
+    /^(.+?)\s+기준치:\s*(\d+)(?:\s*\/\s*\d+){0,2}\s+굴림:\s*(\d+)(?:\s+판정결과:\s*(.+))?$/i
+  );
+  if (cocLikeMatch) {
+    return {
+      source: "roll20",
+      rule: "coc7",
+      template: "coc-text",
+      inputs: {
+        skill: safeNormalize(cocLikeMatch[1] || ""),
+        target: Number(cocLikeMatch[2]),
+        roll: Number(cocLikeMatch[3]),
+        result: safeNormalize(cocLikeMatch[4] || "") || null,
+      },
+    };
+  }
+
+  return null;
+}
+
+function joinDescAnchorLines(rawHtml, lineBreakToken = "\n") {
+  const { normalizeText, stripHtmlTags } = parserUtils;
+  const safeNormalize = typeof normalizeText === "function" ? normalizeText : normalizeMessageText;
+  const safeStripTags =
+    typeof stripHtmlTags === "function"
+      ? stripHtmlTags
+      : (html) => String(html || "").replace(/<[^>]*>/g, " ");
+
+  const lines = [];
+  const regex = /<a\b[^>]*>([\s\S]*?)<\/a>/gi;
+  let matched = regex.exec(String(rawHtml || ""));
+  while (matched) {
+    const line = safeNormalize(safeStripTags(matched[1] || ""));
+    if (line) lines.push(line);
+    matched = regex.exec(String(rawHtml || ""));
+  }
+
+  if (lines.length < 2) return "";
+  return lines.join(String(lineBreakToken || "\n"));
+}
+
+function normalizeImgurLinksInJsonText(rawJsonText) {
+  return String(rawJsonText || "").replace(
+    /https:\/\/(?:www\.)?imgur\.com\//gi,
+    "https://i.imgur.com/"
+  );
+}
+
+function resolveMessageId(message, index) {
+  const direct = String(message?.id || "").trim();
+  if (direct) return direct;
+  return String((Number(index) || 0) + 1);
+}
+
+function collectJsonExportMessages(root) {
+  if (!root || typeof root.querySelectorAll !== "function") return [];
+  const view =
+    root.defaultView ||
+    (root.ownerDocument && root.ownerDocument.defaultView) ||
+    (typeof window !== "undefined" ? window : null);
+  return Array.from(root.querySelectorAll("div.message")).filter((messageEl) => {
+    const inlineDisplay = String(messageEl?.style?.display || "")
+      .trim()
+      .toLowerCase();
+    if (inlineDisplay === "none") return false;
+
+    if (view && typeof view.getComputedStyle === "function") {
+      const computedDisplay = String(view.getComputedStyle(messageEl)?.display || "")
+        .trim()
+        .toLowerCase();
+      if (computedDisplay === "none") return false;
+    }
+
+    return true;
+  });
+}
+
+function formatTimestampToKoreanMeridiem(rawTimestamp) {
+  const normalized = normalizeMessageText(rawTimestamp);
+  if (!normalized) return "";
+
+  const alreadyKorean = normalized.match(/^(오전|오후)\s*(\d{1,2}):(\d{2})$/);
+  if (alreadyKorean) return `${alreadyKorean[1]} ${alreadyKorean[2]}:${alreadyKorean[3]}`;
+
+  const ampmMatch = normalized.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\b/i);
+  if (!ampmMatch) return normalized;
+
+  const hour = Number(ampmMatch[1]);
+  const minute = ampmMatch[2];
+  if (!Number.isFinite(hour) || hour < 1 || hour > 12) return normalized;
+  const meridiem = String(ampmMatch[3] || "").toUpperCase() === "AM" ? "오전" : "오후";
+  return `${meridiem} ${hour}:${minute}`;
+}
+
+function formatTextColor(rawColor) {
+  const value = String(rawColor || "").trim();
+  if (!value) return "";
+  const normalized = value.replace(/;+\s*$/g, "").trim();
+  if (!normalized) return "";
+  if (/^color\s*:/i.test(normalized)) {
+    return normalized.replace(/\s*:\s*/i, ": ").trim();
+  }
+  return `color: ${normalized}`;
+}
+
+function buildSpeakerImages(speakerImageUrl) {
+  const url = String(speakerImageUrl || "").trim();
+  if (!url) return undefined;
+  return {
+    avatar: {
+      url,
+    },
+  };
+}
+
+function omitNullishDeep(value) {
+  if (value == null) return undefined;
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => omitNullishDeep(item))
+      .filter((item) => item !== undefined);
+  }
+
+  if (typeof value === "object") {
+    const result = {};
+    Object.entries(value).forEach(([key, val]) => {
+      const cleaned = omitNullishDeep(val);
+      if (cleaned !== undefined) result[key] = cleaned;
+    });
+    return result;
+  }
+
+  return value;
+}
+
+function removeLegacyVersionFieldDeep(value) {
+  if (value == null) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => removeLegacyVersionFieldDeep(item));
+  }
+  if (typeof value === "object") {
+    const result = {};
+    Object.entries(value).forEach(([key, val]) => {
+      if (key === "v") return;
+      result[key] = removeLegacyVersionFieldDeep(val);
+    });
+    return result;
+  }
+  return value;
+}
+
+function inferRuleTypeFromLines(lines) {
+  const list = Array.isArray(lines) ? lines : [];
+  for (const line of list) {
+    const rule = String(line?.input?.dice?.rule || "")
+      .trim()
+      .toLowerCase();
+    if (!rule) continue;
+    if (rule.includes("insane")) return "Insane";
+    if (rule.includes("coc")) return "COC";
+  }
+  return "";
+}
+
+function buildChatJsonDocument({ scenarioTitle = "", lines = [] } = {}) {
+  return {
+    schemaVersion: 1,
+    ebookView: {
+      titlePage: {
+        scenarioTitle: String(scenarioTitle || ""),
+        ruleType: inferRuleTypeFromLines(lines),
+        gm: "",
+        pl: "",
+        writer: "",
+        copyright: "",
+        identifier: "",
+        extraMetaItems: [],
+      },
+    },
+    lines: Array.isArray(lines) ? lines : [],
+  };
+}
+
+function buildChatJsonEntry({
+  id,
+  speaker,
+  role = "character",
+  text,
+  timestamp = "",
+  textColor = "",
+  imageUrl = null,
+  speakerImageUrl = null,
+  dice = null,
+}) {
+  const safeTextBuilder =
+    typeof parserUtils.toSafeText === "function"
+      ? parserUtils.toSafeText
+      : (raw) =>
+          String(raw || "")
+            .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")
+            .replace(/\s+/g, " ")
+            .trim();
+  const normalizedText = String(text || "");
+  const rawInput = {};
+  if (imageUrl != null) rawInput.imageUrl = String(imageUrl);
+  const speakerImages = buildSpeakerImages(speakerImageUrl);
+  if (speakerImages) rawInput.speakerImages = speakerImages;
+  if (dice && typeof dice === "object") {
+    rawInput.dice = removeLegacyVersionFieldDeep(dice);
+  }
+  const input = omitNullishDeep(rawInput) || {};
+  const entry = {
+    id: String(id || ""),
+    speaker: String(speaker || ""),
+    role: String(role || "character"),
+    timestamp: formatTimestampToKoreanMeridiem(timestamp),
+    textColor: formatTextColor(textColor),
+    text: normalizedText,
+    safetext: safeTextBuilder(normalizedText),
+    input,
+  };
+
+  return omitNullishDeep(entry);
+}
+
+module.exports = {
+  parseRoll20DicePayload,
+  isHiddenMessagePlaceholderText,
+  normalizeMessageText,
+  joinDescAnchorLines,
+  normalizeImgurLinksInJsonText,
+  resolveMessageId,
+  collectJsonExportMessages,
+  buildChatJsonDocument,
+  buildChatJsonEntry,
+};

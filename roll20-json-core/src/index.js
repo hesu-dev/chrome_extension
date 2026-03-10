@@ -5,12 +5,14 @@ function notReady() {
 const parserUtils = require("./parsers/parser_utils.js");
 const cocRuleParser = require("./parsers/coc_rule_parser.js");
 const insaneRuleParser = require("./parsers/insane_rule_parser.js");
+const chatJson = require("./chat_json_export.js");
 
 module.exports = {
-  parseRoll20DicePayload: notReady,
-  buildChatJsonDocument: notReady,
-  buildChatJsonEntry: notReady,
+  parseRoll20DicePayload: chatJson.parseRoll20DicePayload || notReady,
+  buildChatJsonDocument: chatJson.buildChatJsonDocument || notReady,
+  buildChatJsonEntry: chatJson.buildChatJsonEntry || notReady,
   parserUtils,
   cocRuleParser,
   insaneRuleParser,
+  chatJson,
 };
