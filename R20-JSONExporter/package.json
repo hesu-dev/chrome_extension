@@ -5,7 +5,7 @@
   "description": "Build tooling for Roll20 cleaner Chrome extension",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "watch": "chokidar \"manifest.json\" \"popup.html\" \"css/**/*\" \"js/**/*\" -c \"npm run build\"",
+    "watch": "chokidar \"manifest.json\" \"popup.html\" \"css/**/*\" \"js/**/*\" \"scripts/**/*\" \"../roll20-json-core/src/**/*\" -c \"npm run build\"",
     "zip": "node scripts/zip.mjs",
     "build:release": "npm run build && npm run zip"
   },
