@@ -107,6 +107,41 @@
     };
   }
 
+  function extractNinpoSkill(rawLabel) {
+    const { normalizeText } = parserUtils;
+    const text = normalizeText(rawLabel);
+    if (!text) return "";
+    const matched = text.match(/\broll\b\s*(.+)$/i);
+    if (!matched?.[1]) return text;
+    return normalizeText(matched[1]);
+  }
+
+  function parseNinpoPayload(html, template) {
+    const { extractElementInnerHtmlByClass, normalizeText, stripHtmlTags, collectInlineRollSpanIntegers } =
+      parserUtils;
+    if (String(template || "").toLowerCase() !== "ninpo") return null;
+    const safeHtml = String(html || "");
+
+    const titleHtml = extractElementInnerHtmlByClass(safeHtml, "span", "sheet-big");
+    const titleText = normalizeText(stripHtmlTags(titleHtml || ""));
+    const skill = extractNinpoSkill(titleText);
+
+    const resultAreaHtml = extractElementInnerHtmlByClass(safeHtml, "div", "sheet-resright");
+    const targetRowHtml = extractElementInnerHtmlByClass(safeHtml, "div", "sheet-myrow");
+    const resultRolls = collectInlineRollSpanIntegers(resultAreaHtml);
+    const targetRolls = collectInlineRollSpanIntegers(targetRowHtml);
+    const roll = resultRolls.length ? resultRolls[0] : null;
+    const target = targetRolls.length ? targetRolls[targetRolls.length - 1] : null;
+    if (!skill || !Number.isFinite(target) || !Number.isFinite(roll)) return null;
+
+    return {
+      source: "roll20",
+      rule: "insane",
+      template: "insane-dice",
+      inputs: { skill, target, roll },
+    };
+  }
+
   function parseInsDescPayload(html, template) {
     const { normalizeText, stripHtmlTags } = parserUtils;
     if (String(template || "").toLowerCase() !== "insdesc") return null;
@@ -227,6 +262,7 @@
 
   function parseInsaneRulePayload({ html, template }) {
     if (template === "insane") return parseInsanePayload(html, template);
+    if (template === "ninpo") return parseNinpoPayload(html, template);
     if (template === "insdice") return parseInsDicePayload(html, template);
     if (template === "insskill") return parseInsSkillPayload(html, template);
     if (template === "insdesc") return parseInsDescPayload(html, template);
