@@ -103,3 +103,40 @@ test("firefox mobile export falls back to share when background download fails",
     text: '{"schemaVersion":1}',
   });
 });
+
+test("firefox mobile export falls back to copy when share also fails", async () => {
+  let copiedText = "";
+
+  const result = await exportJsonFromActiveTab({
+    browserApi: {
+      tabs: {
+        query: async () => [{ id: 10 }],
+        sendMessage: async () => ({
+          ok: true,
+          jsonText: '{"schemaVersion":1}',
+          filenameBase: "session-c",
+        }),
+      },
+      runtime: {
+        sendMessage: async () => ({
+          ok: false,
+          errorMessage: "downloads blocked",
+        }),
+      },
+    },
+    navigatorApi: {
+      share: async () => {
+        throw new Error("share blocked");
+      },
+      clipboard: {
+        writeText: async (text) => {
+          copiedText = text;
+        },
+      },
+    },
+    setStatus() {},
+  });
+
+  assert.equal(result.method, "copy");
+  assert.equal(copiedText, '{"schemaVersion":1}');
+});

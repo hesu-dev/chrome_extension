@@ -7,17 +7,17 @@ const FIREFOX_PING_MESSAGE = "R20_JSON_EXPORTER_FIREFOX_PING";
 const FIREFOX_EXPORT_JSON_MESSAGE = "R20_JSON_EXPORTER_FIREFOX_EXPORT_JSON";
 const FIREFOX_DOWNLOAD_JSON_MESSAGE = "R20_JSON_EXPORTER_FIREFOX_DOWNLOAD_JSON";
 
-function getFirefoxExportAction({ canDownload = true, canShare = false } = {}) {
+function getFirefoxExportAction({ canDownload = true, canShare = false, canCopy = false } = {}) {
   if (canDownload) {
     return {
       primary: "download",
-      fallbacks: canShare ? ["share"] : [],
+      fallbacks: [canShare ? "share" : "", canCopy ? "copy" : ""].filter(Boolean),
     };
   }
   if (canShare) {
     return {
       primary: "share",
-      fallbacks: [],
+      fallbacks: canCopy ? ["copy"] : [],
     };
   }
   return {
@@ -32,6 +32,10 @@ function canUseDownloadsApi(browserApi = typeof browser !== "undefined" ? browse
 
 function canUseShareApi(navigatorApi = typeof navigator !== "undefined" ? navigator : null) {
   return typeof navigatorApi?.share === "function";
+}
+
+function canUseClipboardApi(navigatorApi = typeof navigator !== "undefined" ? navigator : null) {
+  return typeof navigatorApi?.clipboard?.writeText === "function";
 }
 
 async function performExportAction(action, payload, { browserApi, navigatorApi }) {
@@ -103,6 +107,7 @@ async function exportJsonFromActiveTab({
   const actionPlan = getFirefoxExportAction({
     canDownload: canUseDownloadsApi(browserApi),
     canShare: canUseShareApi(navigatorApi),
+    canCopy: canUseClipboardApi(navigatorApi),
   });
   const actions = [actionPlan.primary, ...(actionPlan.fallbacks || [])];
   let lastError = null;
@@ -157,6 +162,7 @@ if (typeof module !== "undefined" && module.exports) {
     getFirefoxExportAction,
     canUseDownloadsApi,
     canUseShareApi,
+    canUseClipboardApi,
     exportJsonFromActiveTab,
   };
 }
