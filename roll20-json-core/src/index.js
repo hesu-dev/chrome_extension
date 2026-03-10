@@ -6,6 +6,12 @@ const parserUtils = require("./parsers/parser_utils.js");
 const cocRuleParser = require("./parsers/coc_rule_parser.js");
 const insaneRuleParser = require("./parsers/insane_rule_parser.js");
 const chatJson = require("./chat_json_export.js");
+const browserContract = {
+  parserUtils,
+  cocRuleParser,
+  insaneRuleParser,
+  chatJson,
+};
 
 module.exports = {
   parseRoll20DicePayload: chatJson.parseRoll20DicePayload || notReady,
@@ -15,4 +21,5 @@ module.exports = {
   cocRuleParser,
   insaneRuleParser,
   chatJson,
+  browserContract,
 };

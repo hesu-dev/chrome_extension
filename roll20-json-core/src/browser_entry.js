@@ -5,6 +5,6 @@
       : {};
 
   if (typeof window !== "undefined") {
-    window.Roll20JsonCore = Object.assign({}, window.Roll20JsonCore, api);
+    window.Roll20JsonCore = Object.assign({}, window.Roll20JsonCore, api.browserContract || api);
   }
 })();
