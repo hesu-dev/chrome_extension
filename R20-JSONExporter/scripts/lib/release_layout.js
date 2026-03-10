@@ -5,6 +5,8 @@ const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const REPO_ROOT = path.resolve(PROJECT_ROOT, "..");
 const CORE_ROOT = path.join(REPO_ROOT, "roll20-json-core", "src");
 const CHROME_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "chrome");
+const FIREFOX_PROJECT_ROOT = path.join(REPO_ROOT, "R20-JSONExporter-firefox-mobile");
+const FIREFOX_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "firefox-mobile");
 const VENDOR_CORE_PATH = "js/vendor/roll20-json-core.js";
 const STAGED_ROOT_ITEMS = ["manifest.json", "popup.html", "icons", "css", "js"];
 
@@ -31,6 +33,14 @@ function getSourceManifest() {
 
 function getChromeStageManifest() {
   const manifest = getSourceManifest();
+  return injectVendorScript(manifest);
+}
+
+function getFirefoxSourceManifest() {
+  return JSON.parse(fs.readFileSync(path.join(FIREFOX_PROJECT_ROOT, "manifest.json"), "utf8"));
+}
+
+function injectVendorScript(manifest) {
   const staged = JSON.parse(JSON.stringify(manifest));
   staged.content_scripts = (staged.content_scripts || []).map((entry) => {
     const scripts = Array.isArray(entry.js) ? entry.js.filter((item) => item !== VENDOR_CORE_PATH) : [];
@@ -40,6 +50,10 @@ function getChromeStageManifest() {
     };
   });
   return staged;
+}
+
+function getFirefoxStageManifest() {
+  return injectVendorScript(getFirefoxSourceManifest());
 }
 
 function normalizeModuleSpecifier(fromId, specifier) {
@@ -99,28 +113,45 @@ ${moduleFactories}
 })();`;
 }
 
-function stageChromeRelease() {
-  fs.rmSync(CHROME_RELEASE_ROOT, { recursive: true, force: true });
-  ensureDir(CHROME_RELEASE_ROOT);
+function stageTargetRelease({ sourceRoot, releaseRoot, manifest, items }) {
+  fs.rmSync(releaseRoot, { recursive: true, force: true });
+  ensureDir(releaseRoot);
 
-  STAGED_ROOT_ITEMS.forEach((item) => {
-    copyRecursive(path.join(PROJECT_ROOT, item), path.join(CHROME_RELEASE_ROOT, item));
+  items.forEach((item) => {
+    const sourcePath = path.join(sourceRoot, item);
+    if (!fs.existsSync(sourcePath)) return;
+    copyRecursive(sourcePath, path.join(releaseRoot, item));
   });
 
-  fs.writeFileSync(
-    path.join(CHROME_RELEASE_ROOT, "manifest.json"),
-    `${JSON.stringify(getChromeStageManifest(), null, 2)}\n`
-  );
+  fs.writeFileSync(path.join(releaseRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
-  const vendorPath = path.join(CHROME_RELEASE_ROOT, VENDOR_CORE_PATH);
+  const vendorPath = path.join(releaseRoot, VENDOR_CORE_PATH);
   ensureDir(path.dirname(vendorPath));
   fs.writeFileSync(vendorPath, `${buildSharedCoreBundle()}\n`);
 
   return {
-    releaseRoot: CHROME_RELEASE_ROOT,
-    manifestPath: path.join(CHROME_RELEASE_ROOT, "manifest.json"),
+    releaseRoot,
+    manifestPath: path.join(releaseRoot, "manifest.json"),
     vendorPath,
   };
+}
+
+function stageChromeRelease() {
+  return stageTargetRelease({
+    sourceRoot: PROJECT_ROOT,
+    releaseRoot: CHROME_RELEASE_ROOT,
+    manifest: getChromeStageManifest(),
+    items: STAGED_ROOT_ITEMS,
+  });
+}
+
+function stageFirefoxRelease() {
+  return stageTargetRelease({
+    sourceRoot: FIREFOX_PROJECT_ROOT,
+    releaseRoot: FIREFOX_RELEASE_ROOT,
+    manifest: getFirefoxStageManifest(),
+    items: ["manifest.json", "popup.html", "icons", "js"],
+  });
 }
 
 module.exports = {
@@ -128,9 +159,14 @@ module.exports = {
   REPO_ROOT,
   CORE_ROOT,
   CHROME_RELEASE_ROOT,
+  FIREFOX_PROJECT_ROOT,
+  FIREFOX_RELEASE_ROOT,
   VENDOR_CORE_PATH,
   getSourceManifest,
   getChromeStageManifest,
+  getFirefoxSourceManifest,
+  getFirefoxStageManifest,
   buildSharedCoreBundle,
   stageChromeRelease,
+  stageFirefoxRelease,
 };

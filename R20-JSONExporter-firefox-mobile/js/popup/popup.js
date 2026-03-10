@@ -3,6 +3,25 @@ function setStatus(text) {
   if (statusEl) statusEl.textContent = text;
 }
 
+function getFirefoxExportAction({ canDownload = true, canShare = false } = {}) {
+  if (canDownload) {
+    return {
+      primary: "download",
+      fallbacks: canShare ? ["share"] : [],
+    };
+  }
+  if (canShare) {
+    return {
+      primary: "share",
+      fallbacks: [],
+    };
+  }
+  return {
+    primary: "copy",
+    fallbacks: [],
+  };
+}
+
 async function pingActiveTab() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
@@ -20,10 +39,16 @@ async function pingActiveTab() {
   }
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  const button = document.getElementById("exportJson");
-  if (button) {
-    button.addEventListener("click", pingActiveTab);
-  }
-  setStatus("준비되었습니다.");
-});
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { getFirefoxExportAction };
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("DOMContentLoaded", () => {
+    const button = document.getElementById("exportJson");
+    if (button) {
+      button.addEventListener("click", pingActiveTab);
+    }
+    setStatus("준비되었습니다.");
+  });
+}
