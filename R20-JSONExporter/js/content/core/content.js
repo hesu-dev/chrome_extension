@@ -743,8 +743,11 @@
   }
 
   function buildAvatarReplacedChatJson(replacements) {
+    const options =
+      arguments.length > 1 && arguments[1] && typeof arguments[1] === "object" ? arguments[1] : {};
     const { toAbsoluteUrl } = getUtils();
     const { buildReplacementMaps, findReplacementForMessage } = getAvatarRules();
+    const avatarLinkMetaApi = window.Roll20CleanerAvatarLinkMeta || {};
     const {
       resolveMessageId,
       buildChatJsonEntry,
@@ -757,6 +760,18 @@
     const { resolveRoleForMessage } = getRoleParser();
     const safeToAbsoluteUrl =
       typeof toAbsoluteUrl === "function" ? toAbsoluteUrl : (value) => String(value || "");
+    const createAvatarLinkMetaIndex =
+      typeof avatarLinkMetaApi.createAvatarLinkMetaIndex === "function"
+        ? avatarLinkMetaApi.createAvatarLinkMetaIndex
+        : () => ({ byPair: new Map(), byOriginal: new Map() });
+    const resolveAvatarLinkMeta =
+      typeof avatarLinkMetaApi.resolveAvatarLinkMeta === "function"
+        ? avatarLinkMetaApi.resolveAvatarLinkMeta
+        : ({ currentSrc }) => ({
+            originalUrl: String(currentSrc || ""),
+            redirectedUrl: String(currentSrc || ""),
+            effectiveUrl: String(currentSrc || ""),
+          });
     const safeResolveMessageId =
       typeof resolveMessageId === "function"
         ? resolveMessageId
@@ -820,6 +835,10 @@
             normalizeSpeakerName,
           })
         : { byPair: new Map(), byOriginal: new Map() };
+    const avatarLinkMetaIndex = createAvatarLinkMetaIndex(options.avatarMappings || [], {
+      toAbsoluteUrl: safeToAbsoluteUrl,
+      normalizeSpeakerName,
+    });
 
     const messages =
       typeof collectJsonExportMessages === "function"
@@ -879,7 +898,23 @@
               { toAbsoluteUrl: safeToAbsoluteUrl, normalizeSpeakerName }
             )
           : "";
-      const imageUrl = replacement || effectiveSpeakerImageUrl;
+      const avatarLinkMeta = options.includeAvatarLinkMeta
+        ? resolveAvatarLinkMeta(
+            {
+              speaker,
+              currentSrc: effectiveCurrentSrc,
+            },
+            avatarLinkMetaIndex,
+            {
+              toAbsoluteUrl: safeToAbsoluteUrl,
+              normalizeSpeakerName,
+            }
+          )
+        : null;
+      const imageUrl =
+        replacement ||
+        avatarLinkMeta?.effectiveUrl ||
+        effectiveSpeakerImageUrl;
       if (canInherit) {
         previousMessageContext = {
           speaker,
@@ -903,7 +938,7 @@
         messageEl.getAttribute("id") ||
         "";
 
-      return safeBuildChatJsonEntry({
+      const entry = safeBuildChatJsonEntry({
         id: safeResolveMessageId({ id: messageId }, index),
         speaker,
         role: roleForEntry,
@@ -914,6 +949,18 @@
         speakerImageUrl: imageUrl || null,
         dice,
       });
+      if (
+        options.includeAvatarLinkMeta &&
+        avatarLinkMeta &&
+        (avatarLinkMeta.originalUrl || avatarLinkMeta.redirectedUrl)
+      ) {
+        entry.input = entry.input && typeof entry.input === "object" ? entry.input : {};
+        entry.input.avatarLinkMeta = {
+          originalUrl: avatarLinkMeta.originalUrl || "",
+          redirectedUrl: avatarLinkMeta.redirectedUrl || "",
+        };
+      }
+      return entry;
     });
 
     const exportDocument = safeBuildChatJsonDocument({
@@ -925,6 +972,22 @@
       return normalizeImgurLinksInJsonText(jsonText);
     }
     return jsonText.replace(/https:\/\/(?:www\.)?imgur\.com\//gi, "https://i.imgur.com/");
+  }
+
+  async function buildDirectReadingLogChatJson() {
+    const { buildLoadedImageUrlMap } = getDom();
+    const { collectAvatarMappingsFromRoot } = getAvatar();
+    const avatarMappings =
+      typeof collectAvatarMappingsFromRoot === "function"
+        ? await collectAvatarMappingsFromRoot(
+            document,
+            buildLoadedImageUrlMap ? buildLoadedImageUrlMap() : undefined
+          )
+        : [];
+    return buildAvatarReplacedChatJson([], {
+      avatarMappings,
+      includeAvatarLinkMeta: true,
+    });
   }
 
   // --- Initialization ---
@@ -1156,6 +1219,30 @@
           errorMessage: error?.message ? String(error.message) : "JSON 생성 중 오류가 발생했습니다.",
         });
       }
+      return true;
+    }
+
+    if (message?.type === "DOWNLOAD_READINGLOG_JSON_DIRECT") {
+      buildDirectReadingLogChatJson()
+        .then((jsonText) => {
+          if (downloadTextFileInPage) {
+            downloadTextFileInPage(
+              jsonText,
+              getDownloadNameBase(),
+              "json",
+              "application/json;charset=utf-8"
+            );
+          }
+          sendResponse({ ok: true });
+        })
+        .catch((error) => {
+          console.error(error);
+          sendResponse({
+            ok: false,
+            errorMessage:
+              error?.message ? String(error.message) : "JSON 생성 중 오류가 발생했습니다.",
+          });
+        });
       return true;
     }
   });

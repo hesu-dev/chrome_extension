@@ -30,7 +30,10 @@
         <span class="toggle-text">히든 메세지 감춤</span>
       </label>
       <button id="downloadTest2" class="btn btn-tertiary" type="button">
-        프로필 이미지 교체
+        다운로드전 이미지 링크 확인
+      </button>
+      <button id="downloadAvatarMappedJson" class="btn btn-quaternary" type="button">
+        ReadingLog 파일 다운로드
       </button>
       <section id="avatarEditor" class="avatar-editor hidden">
         <div class="avatar-editor-header">
@@ -42,10 +45,6 @@
         <!-- <button id="downloadAvatarMappedHtml" class="btn btn-quaternary" type="button">
           교체한 링크로 다운로드 (.html)
         </button> -->
-
-        <button id="downloadAvatarMappedJson" class="btn btn-quaternary hidden" type="button">
-          RedingLog용 다운로드(.json)
-        </button>
       </section>
       <div id="progressWrap" class="progress-wrap hidden" aria-live="polite">
         <div class="progress-track">
@@ -61,6 +60,7 @@
   </main>
   <script src="js/popup/filter_apply_feedback.js"></script>
   <script src="js/popup/config/feature_flags.js"></script>
+  <script src="js/popup/avatar_download_plan.js"></script>
   <script src="js/popup/popup.js"></script>
 </body>
 

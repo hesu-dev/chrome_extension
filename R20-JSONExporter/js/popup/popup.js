@@ -15,8 +15,7 @@ const appEl = document.querySelector(".app");
 
 // ===== External feature adapters =====
 const applyFeedback = window.Roll20CleanerFilterApplyFeedback || {};
-const featureFlags = window.Roll20CleanerFeatureFlags || {};
-const enableJsonDownload = !!featureFlags.enableJsonDownload;
+const avatarDownloadPlan = window.Roll20CleanerAvatarDownloadPlan || {};
 
 // ===== Shared popup state =====
 let activeSettingApplyRequestId = "";
@@ -125,6 +124,7 @@ function injectContentScript(tabId) {
           "js/content/avatar/avatar_rules.js",
           "js/content/export/html_chunk_serializer.js",
           "js/content/export/archive_html_sanitizer.js",
+          "js/content/export/avatar_link_meta.js",
           "js/content/export/message_context_parser.js",
           "js/content/avatar/avatar_processor.js",
           "js/content/export/parsers/parser_utils.js",
@@ -435,6 +435,7 @@ function renderAvatarMappings(mappings) {
     input.dataset.id = item.id;
     input.dataset.name = item.name;
     input.dataset.originalUrl = item.originalUrl;
+    input.dataset.initialUrl = item.avatarUrl;
 
     right.appendChild(name);
     right.appendChild(input);
@@ -445,22 +446,27 @@ function renderAvatarMappings(mappings) {
 }
 
 function collectAvatarReplacements() {
-  const replacements = [];
   const inputs = avatarListEl.querySelectorAll("input.avatar-input");
-  inputs.forEach((input) => {
-    const id = input.dataset.id;
-    const name = input.dataset.name;
-    const originalUrl = input.dataset.originalUrl;
-    const value = input.value.trim();
-    if (!id || !name || !originalUrl || !value) return;
-    replacements.push({
-      id,
-      name,
-      originalUrl,
-      newUrl: value,
-    });
-  });
-  return replacements;
+  const collector =
+    typeof avatarDownloadPlan.collectAvatarReplacementsFromInputs === "function"
+      ? avatarDownloadPlan.collectAvatarReplacementsFromInputs
+      : (rows) =>
+          Array.from(rows || []).map((input) => ({
+            id: input.dataset.id,
+            name: input.dataset.name,
+            originalUrl: input.dataset.originalUrl,
+            newUrl: input.value.trim(),
+          }));
+  return collector(inputs);
+}
+
+function collectChangedAvatarReplacements() {
+  const inputs = avatarListEl.querySelectorAll("input.avatar-input");
+  const collector =
+    typeof avatarDownloadPlan.collectAvatarReplacementsFromInputs === "function"
+      ? avatarDownloadPlan.collectAvatarReplacementsFromInputs
+      : () => [];
+  return collector(inputs, { onlyChanged: true });
 }
 
 async function runAvatarReplacementStream(tabId, replacements) {
@@ -547,11 +553,18 @@ async function runAvatarReplacementJsonDownload(tabId, replacements) {
   }
 }
 
+async function runDirectReadingLogJsonDownload(tabId) {
+  const response = await requestWithRecovery(tabId, "DOWNLOAD_READINGLOG_JSON_DIRECT");
+  if (!response?.ok) {
+    throw new Error(response?.errorMessage || "ReadingLog 파일 다운로드에 실패했습니다.");
+  }
+}
+
 async function loadAvatarMappingsForEditor() {
   try {
     const tabId = await getValidatedActiveTabId();
 
-    setStatus("이름/아바타 목록을 불러오는 중입니다...");
+    setStatus("이미지 링크 목록을 불러오는 중입니다...");
     const response = await requestWithRecovery(tabId, "GET_AVATAR_MAPPINGS");
     const mappings = Array.isArray(response?.mappings) ? response.mappings : [];
 
@@ -563,7 +576,7 @@ async function loadAvatarMappingsForEditor() {
     currentAvatarMappings = mappings;
     renderAvatarMappings(mappings);
     avatarEditorEl.classList.remove("hidden");
-    setStatus(`총 ${mappings.length}개의 이름을 불러왔습니다.`);
+    setStatus(`총 ${mappings.length}개의 이미지 링크를 불러왔습니다.`);
   } catch (error) {
     setStatus(`아바타 목록을 불러오지 못했습니다: ${normalizeUiError(error)}`);
   }
@@ -574,7 +587,7 @@ async function runAvatarMappedHtmlDownload() {
     const tabId = await getValidatedActiveTabId();
 
     if (!currentAvatarMappings.length) {
-      setStatus("먼저 프로필 이미지 교체 버튼으로 목록을 불러오세요.");
+      setStatus("먼저 다운로드전 이미지 링크 확인 버튼으로 목록을 불러오세요.");
       return;
     }
 
@@ -590,54 +603,54 @@ async function runAvatarMappedHtmlDownload() {
       return;
     }
 
-    setStatus("프로필 이미지 교체 HTML을 만드는 중입니다...");
+    setStatus("교체한 이미지 링크 HTML을 만드는 중입니다...");
     const streamSupported = await supportsAvatarReplacementStream(tabId);
     if (streamSupported) {
       await runAvatarReplacementStream(tabId, replacements);
       setProgress(100, "완료되었습니다.");
-      setStatus("프로필 이미지 교체 HTML 다운로드가 시작되었습니다.");
+      setStatus("교체한 이미지 링크 HTML 다운로드가 시작되었습니다.");
       setTimeout(() => hideProgress(), 900);
       return;
     }
 
     await runAvatarReplacementFallback(tabId, replacements);
     hideProgress();
-    setStatus("프로필 이미지 교체 HTML 다운로드가 시작되었습니다.");
+    setStatus("교체한 이미지 링크 HTML 다운로드가 시작되었습니다.");
   } catch (error) {
     hideProgress();
     setStatus(`아바타 치환 다운로드에 실패했습니다: ${normalizeUiError(error)}`);
   }
 }
 
-async function runAvatarMappedJsonDownload() {
+async function runReadingLogJsonDownload() {
   try {
     const tabId = await getValidatedActiveTabId();
-    if (!currentAvatarMappings.length) {
-      setStatus("먼저 프로필 이미지 교체 버튼으로 목록을 불러오세요.");
-      return;
-    }
-
-    const replacements = collectAvatarReplacements();
-    if (!replacements.length) {
-      setStatus("적용할 이미지 링크가 없습니다.");
-      return;
-    }
-
     const ready = await ensureContentScriptLoaded(tabId);
     if (!ready) {
       setStatus("컨텐츠 스크립트 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
       return;
     }
 
-    setStatus("프로필 이미지 교체 JSON을 만드는 중입니다...");
+    const replacements = collectChangedAvatarReplacements();
+    const resolveMode =
+      typeof avatarDownloadPlan.resolveReadingLogDownloadMode === "function"
+        ? avatarDownloadPlan.resolveReadingLogDownloadMode
+        : (items) => (Array.isArray(items) && items.length > 0 ? "mapped" : "direct");
+    const mode = resolveMode(replacements);
+
+    setStatus("ReadingLog 파일을 만드는 중입니다...");
     setProgress(20, "JSON 데이터를 정리 중입니다...");
-    await runAvatarReplacementJsonDownload(tabId, replacements);
+    if (mode === "mapped") {
+      await runAvatarReplacementJsonDownload(tabId, replacements);
+    } else {
+      await runDirectReadingLogJsonDownload(tabId);
+    }
     setProgress(100, "완료되었습니다.");
-    setStatus("프로필 이미지 교체 JSON 다운로드가 시작되었습니다.");
+    setStatus("ReadingLog 파일 다운로드가 시작되었습니다.");
     setTimeout(() => hideProgress(), 900);
   } catch (error) {
     hideProgress();
-    setStatus(`JSON 다운로드에 실패했습니다: ${normalizeUiError(error)}`);
+    setStatus(`ReadingLog 파일 다운로드에 실패했습니다: ${normalizeUiError(error)}`);
   }
 }
 
@@ -654,7 +667,7 @@ function bindUiEvents() {
   if (downloadAvatarMappedHtmlEl) {
     downloadAvatarMappedHtmlEl.addEventListener("click", runAvatarMappedHtmlDownload);
   }
-  downloadAvatarMappedJsonEl.addEventListener("click", runAvatarMappedJsonDownload);
+  downloadAvatarMappedJsonEl.addEventListener("click", runReadingLogJsonDownload);
 
   window.addEventListener("unload", () => {
     stopReadyStatusProbe();
@@ -704,11 +717,6 @@ function hydrateInitialState() {
       colorFilterEnabledEl.checked = colorFilterEnabled;
       hiddenTextEnabledEl.checked = hiddenTextEnabled;
       targetColorEl.value = targetColor;
-      if (enableJsonDownload) {
-        downloadAvatarMappedJsonEl.classList.remove("hidden");
-      } else {
-        downloadAvatarMappedJsonEl.classList.add("hidden");
-      }
       updateInitialReadyStatus();
     }
   );
