@@ -2,7 +2,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
-const { CHROME_RELEASE_ROOT, FIREFOX_RELEASE_ROOT } = require("./lib/release_layout.js");
+const {
+  CHROME_RELEASE_ROOT,
+  FIREFOX_RELEASE_ROOT,
+  SAFARI_RELEASE_ROOT,
+} = require("./lib/release_layout.js");
 const { rebuildReleaseZip } = require("./lib/release_zip.js");
 
 for (const [label, releaseRoot, zipName] of [
@@ -19,3 +23,5 @@ for (const [label, releaseRoot, zipName] of [
   }
   console.log(`${label} release zipped at ${zipPath}`);
 }
+
+console.log(`Safari release is staged as a folder at ${SAFARI_RELEASE_ROOT} (no zip generated)`);

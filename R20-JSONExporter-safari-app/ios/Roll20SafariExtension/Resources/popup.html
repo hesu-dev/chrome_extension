@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>R20 Safari Export</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: #f5f0e6;
+        color: #1f1c17;
+      }
+
+      main {
+        width: 320px;
+        padding: 16px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 20px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        line-height: 1.4;
+      }
+
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #215732;
+        color: #fffdf8;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      section {
+        margin-top: 14px;
+        padding: 12px;
+        border-radius: 12px;
+        background: #fffaf2;
+      }
+
+      dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 88px 1fr;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      dt {
+        color: #756e61;
+      }
+
+      dd {
+        margin: 0;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>R20 Safari Export</h1>
+      <p>Measure the loaded Roll20 chat DOM, build portable JSON, and hand it to the native save bridge next.</p>
+      <button id="exportButton" type="button">Export Roll20 JSON</button>
+      <section aria-live="polite">
+        <dl>
+          <dt>Stage</dt>
+          <dd id="statusStage">Idle</dd>
+          <dt>Status</dt>
+          <dd id="statusMessage">Ready to export Roll20 chat.</dd>
+          <dt>Filename</dt>
+          <dd id="statusFilename">Pending</dd>
+          <dt>Metrics</dt>
+          <dd id="statusMetrics">No Roll20 measurement yet.</dd>
+          <dt>Payload</dt>
+          <dd id="statusPayload">Payload not built yet.</dd>
+          <dt>Inbox</dt>
+          <dd id="statusInbox">Inbox not written yet.</dd>
+        </dl>
+      </section>
+    </main>
+    <script src="js/export_progress_model.js"></script>
+    <script src="js/native_bridge_contract.js"></script>
+    <script src="js/popup.js"></script>
+  </body>
+</html>

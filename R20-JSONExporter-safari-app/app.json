@@ -1,0 +1,12 @@
+{
+  "name": "R20-JSONExporter Safari App",
+  "artifactType": "ios-safari-standalone-scaffold",
+  "readingLogIntegration": false,
+  "extensionBundlePath": "ios/Roll20SafariExtension/Resources",
+  "ios": {
+    "bundleIdentifier": "com.reha.r20safariexport",
+    "extensionBundleIdentifier": "com.reha.r20safariexport.extension",
+    "appGroupId": "group.com.reha.r20safariexport",
+    "bridgeContractPath": "ios/Shared/safari_bridge_contract.json"
+  }
+}

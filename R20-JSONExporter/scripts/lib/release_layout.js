@@ -7,8 +7,16 @@ const CORE_ROOT = path.join(REPO_ROOT, "roll20-json-core", "src");
 const CHROME_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "chrome");
 const FIREFOX_PROJECT_ROOT = path.join(REPO_ROOT, "R20-JSONExporter-firefox-mobile");
 const FIREFOX_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "firefox-mobile");
+const SAFARI_PROJECT_ROOT = path.join(REPO_ROOT, "R20-JSONExporter-safari-app");
+const SAFARI_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "ios-safari");
 const VENDOR_CORE_PATH = "js/vendor/roll20-json-core.js";
 const STAGED_ROOT_ITEMS = ["manifest.json", "popup.html", "icons", "css", "js"];
+const SAFARI_VENDOR_CORE_PATH = path.join(
+  "ios",
+  "Roll20SafariExtension",
+  "Resources",
+  VENDOR_CORE_PATH
+);
 
 function shouldSkipCopyEntry(entryName) {
   return entryName === ".DS_Store";
@@ -61,6 +69,10 @@ function injectVendorScript(manifest) {
 
 function getFirefoxStageManifest() {
   return injectVendorScript(getFirefoxSourceManifest());
+}
+
+function getSafariSourceMetadata() {
+  return JSON.parse(fs.readFileSync(path.join(SAFARI_PROJECT_ROOT, "app.json"), "utf8"));
 }
 
 function normalizeModuleSpecifier(fromId, specifier) {
@@ -120,7 +132,13 @@ ${moduleFactories}
 })();`;
 }
 
-function stageTargetRelease({ sourceRoot, releaseRoot, manifest, items }) {
+function stageTargetRelease({
+  sourceRoot,
+  releaseRoot,
+  manifest,
+  items,
+  vendorRelativePath = VENDOR_CORE_PATH,
+}) {
   fs.rmSync(releaseRoot, { recursive: true, force: true });
   ensureDir(releaseRoot);
 
@@ -130,15 +148,17 @@ function stageTargetRelease({ sourceRoot, releaseRoot, manifest, items }) {
     copyRecursive(sourcePath, path.join(releaseRoot, item));
   });
 
-  fs.writeFileSync(path.join(releaseRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  if (manifest) {
+    fs.writeFileSync(path.join(releaseRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  }
 
-  const vendorPath = path.join(releaseRoot, VENDOR_CORE_PATH);
+  const vendorPath = path.join(releaseRoot, vendorRelativePath);
   ensureDir(path.dirname(vendorPath));
   fs.writeFileSync(vendorPath, `${buildSharedCoreBundle()}\n`);
 
   return {
     releaseRoot,
-    manifestPath: path.join(releaseRoot, "manifest.json"),
+    manifestPath: manifest ? path.join(releaseRoot, "manifest.json") : null,
     vendorPath,
   };
 }
@@ -161,6 +181,23 @@ function stageFirefoxRelease() {
   });
 }
 
+function stageSafariRelease() {
+  const sourceMetadata = getSafariSourceMetadata();
+  const result = stageTargetRelease({
+    sourceRoot: SAFARI_PROJECT_ROOT,
+    releaseRoot: SAFARI_RELEASE_ROOT,
+    manifest: null,
+    items: ["README.md", "app.json", "ios"],
+    vendorRelativePath: SAFARI_VENDOR_CORE_PATH,
+  });
+
+  return {
+    ...result,
+    appMetadataPath: path.join(SAFARI_RELEASE_ROOT, "app.json"),
+    sourceMetadata,
+  };
+}
+
 module.exports = {
   PROJECT_ROOT,
   REPO_ROOT,
@@ -168,13 +205,18 @@ module.exports = {
   CHROME_RELEASE_ROOT,
   FIREFOX_PROJECT_ROOT,
   FIREFOX_RELEASE_ROOT,
+  SAFARI_PROJECT_ROOT,
+  SAFARI_RELEASE_ROOT,
   VENDOR_CORE_PATH,
+  SAFARI_VENDOR_CORE_PATH,
   shouldSkipCopyEntry,
   getSourceManifest,
   getChromeStageManifest,
   getFirefoxSourceManifest,
   getFirefoxStageManifest,
+  getSafariSourceMetadata,
   buildSharedCoreBundle,
   stageChromeRelease,
   stageFirefoxRelease,
+  stageSafariRelease,
 };
