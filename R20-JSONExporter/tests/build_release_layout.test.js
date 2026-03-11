@@ -1,10 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const {
   VENDOR_CORE_PATH,
   getChromeStageManifest,
   getFirefoxStageManifest,
+  stageChromeRelease,
+  stageFirefoxRelease,
 } = require("../scripts/lib/release_layout.js");
 
 test("chrome staged manifest loads bundled core before dependent scripts", () => {
@@ -24,4 +28,28 @@ test("firefox staged manifest loads bundled core before dependent scripts", () =
   assert.equal(scripts[0], VENDOR_CORE_PATH);
   assert.ok(scripts.includes("js/content/export/parsers/parser_utils.js"));
   assert.ok(scripts.includes("js/content/export/chat_json_export.js"));
+});
+
+function collectStageArtifacts(rootPath) {
+  const output = [];
+  for (const entry of fs.readdirSync(rootPath, { withFileTypes: true })) {
+    const fullPath = path.join(rootPath, entry.name);
+    if (entry.isDirectory()) {
+      output.push(...collectStageArtifacts(fullPath));
+      continue;
+    }
+    output.push(path.relative(rootPath, fullPath));
+  }
+  return output;
+}
+
+test("release staging excludes macOS metadata files", () => {
+  const chrome = stageChromeRelease();
+  const firefox = stageFirefoxRelease();
+
+  const chromeEntries = collectStageArtifacts(chrome.releaseRoot);
+  const firefoxEntries = collectStageArtifacts(firefox.releaseRoot);
+
+  assert.equal(chromeEntries.some((item) => item.endsWith(".DS_Store")), false);
+  assert.equal(firefoxEntries.some((item) => item.endsWith(".DS_Store")), false);
 });

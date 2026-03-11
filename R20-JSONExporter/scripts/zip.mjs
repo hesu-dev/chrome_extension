@@ -1,9 +1,9 @@
 import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const { CHROME_RELEASE_ROOT, FIREFOX_RELEASE_ROOT } = require("./lib/release_layout.js");
+const { rebuildReleaseZip } = require("./lib/release_zip.js");
 
 for (const [label, releaseRoot, zipName] of [
   ["Chrome", CHROME_RELEASE_ROOT, "chrome.zip"],
@@ -11,12 +11,11 @@ for (const [label, releaseRoot, zipName] of [
 ]) {
   if (!releaseRoot) continue;
   const zipPath = path.resolve(releaseRoot, "..", zipName);
-  const result = spawnSync("zip", ["-rq", zipPath, "."], {
-    cwd: releaseRoot,
-    stdio: "inherit",
-  });
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+  try {
+    rebuildReleaseZip({ releaseRoot, zipPath });
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
   }
   console.log(`${label} release zipped at ${zipPath}`);
 }

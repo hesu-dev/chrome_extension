@@ -10,11 +10,18 @@ const FIREFOX_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "firefox-mobile"
 const VENDOR_CORE_PATH = "js/vendor/roll20-json-core.js";
 const STAGED_ROOT_ITEMS = ["manifest.json", "popup.html", "icons", "css", "js"];
 
+function shouldSkipCopyEntry(entryName) {
+  return entryName === ".DS_Store";
+}
+
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
 function copyRecursive(sourcePath, targetPath) {
+  if (shouldSkipCopyEntry(path.basename(sourcePath))) {
+    return;
+  }
   const stat = fs.statSync(sourcePath);
   if (stat.isDirectory()) {
     ensureDir(targetPath);
@@ -162,6 +169,7 @@ module.exports = {
   FIREFOX_PROJECT_ROOT,
   FIREFOX_RELEASE_ROOT,
   VENDOR_CORE_PATH,
+  shouldSkipCopyEntry,
   getSourceManifest,
   getChromeStageManifest,
   getFirefoxSourceManifest,
