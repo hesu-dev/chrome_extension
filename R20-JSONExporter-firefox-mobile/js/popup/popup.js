@@ -7,6 +7,8 @@ const FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE =
 const FIREFOX_DOWNLOAD_JSON_MESSAGE = "R20_JSON_EXPORTER_FIREFOX_DOWNLOAD_JSON";
 const avatarDownloadPlan =
   typeof window !== "undefined" ? window.Roll20CleanerAvatarDownloadPlan || {} : {};
+const avatarPreview =
+  typeof window !== "undefined" ? window.Roll20CleanerAvatarPreview || {} : {};
 const statusEl = typeof document !== "undefined" ? document.getElementById("status") : null;
 const imageCheckButtonEl =
   typeof document !== "undefined" ? document.getElementById("downloadTest2") : null;
@@ -154,6 +156,11 @@ function renderAvatarMappings(mappings) {
   Array.from(mappings || []).forEach((item) => {
     const row = document.createElement("div");
 
+    const preview = document.createElement("img");
+    preview.className = "avatar-preview";
+    preview.src = item.avatarUrl;
+    preview.alt = item.name;
+
     const name = document.createElement("div");
     name.textContent = item.name;
 
@@ -165,7 +172,15 @@ function renderAvatarMappings(mappings) {
     input.dataset.originalUrl = item.originalUrl;
     input.dataset.avatarUrl = item.avatarUrl;
     input.dataset.initialUrl = item.avatarUrl;
+    const bindPreview =
+      typeof avatarPreview.bindAvatarPreviewInput === "function"
+        ? avatarPreview.bindAvatarPreviewInput
+        : null;
+    if (bindPreview) {
+      bindPreview(input, preview, { fallbackUrl: item.avatarUrl });
+    }
 
+    row.appendChild(preview);
     row.appendChild(name);
     row.appendChild(input);
     avatarListEl.appendChild(row);

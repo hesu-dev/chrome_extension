@@ -15,6 +15,7 @@ test("popup exposes the renamed image-link check and shared ReadingLog download 
     popupHtml,
     /<button id="downloadAvatarMappedJson"[^>]*\bhidden\b/i
   );
+  assert.match(popupHtml, /js\/popup\/avatar_preview\.js/);
 });
 
 test("chrome manifest version is bumped to 0.7.0", () => {

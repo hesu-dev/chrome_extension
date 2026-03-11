@@ -16,6 +16,7 @@ const appEl = document.querySelector(".app");
 // ===== External feature adapters =====
 const applyFeedback = window.Roll20CleanerFilterApplyFeedback || {};
 const avatarDownloadPlan = window.Roll20CleanerAvatarDownloadPlan || {};
+const avatarPreview = window.Roll20CleanerAvatarPreview || {};
 
 // ===== Shared popup state =====
 let activeSettingApplyRequestId = "";
@@ -438,6 +439,13 @@ function renderAvatarMappings(mappings) {
     input.dataset.originalUrl = item.originalUrl;
     input.dataset.avatarUrl = item.avatarUrl;
     input.dataset.initialUrl = item.avatarUrl;
+    const bindPreview =
+      typeof avatarPreview.bindAvatarPreviewInput === "function"
+        ? avatarPreview.bindAvatarPreviewInput
+        : null;
+    if (bindPreview) {
+      bindPreview(input, preview, { fallbackUrl: item.avatarUrl });
+    }
 
     right.appendChild(name);
     right.appendChild(input);

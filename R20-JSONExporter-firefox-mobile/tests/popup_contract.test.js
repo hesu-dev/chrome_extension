@@ -10,4 +10,5 @@ test("firefox mobile popup exposes the same ReadingLog actions as chrome", () =>
   assert.match(popupHtml, /ReadingLog 파일 다운로드/);
   assert.match(popupHtml, /id="avatarEditor"/);
   assert.match(popupHtml, /id="avatarList"/);
+  assert.match(popupHtml, /js\/popup\/avatar_preview\.js/);
 });

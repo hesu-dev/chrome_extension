@@ -41,7 +41,7 @@ function parseCoc1DicePayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: "coc-1",
+    template: "coc",
     inputs: { skill, roll, target },
   };
 }
@@ -60,7 +60,10 @@ function parseCocRowsPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: String(template),
+    template: String(template || "")
+      .toLowerCase()
+      .replace(/^coc-dice-roll$/, "coc-dice")
+      .replace(/^coc-body-hit-loc$/, "coc-body-hit"),
     inputs: { title, rows },
   };
 }
@@ -140,7 +143,10 @@ function parseCocBomadnessPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: normalizedTemplate,
+    template:
+      normalizedTemplate === "coc-bomadness-rt"
+        ? "coc-madness-realtime"
+        : "coc-madness-summary",
     inputs: { title, rows: [{ label }] },
   };
 }
@@ -175,7 +181,7 @@ function parseCocAttackPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: "coc-attack",
+    template: "coc-attack-bonus-penalty",
     inputs: { skill, target, rolls: rollNumbers, damage },
   };
 }
@@ -196,7 +202,7 @@ function parseCocAttackOnePayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: "coc-attack-1",
+    template: "coc-attack",
     inputs: { skill, target, rolls: [target], damage },
   };
 }
@@ -215,7 +221,7 @@ function parseCocPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: "coc",
+    template: "coc-bonus-penalty",
     inputs: { skill, target, rolls },
   };
 }
@@ -238,7 +244,7 @@ function parseCocBonusPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: "coc",
+    template: "coc-bonus-penalty",
     inputs,
   };
 }
