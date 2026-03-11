@@ -1,12 +1,28 @@
 (function () {
   const FIREFOX_PING_MESSAGE = "R20_JSON_EXPORTER_FIREFOX_PING";
   const FIREFOX_EXPORT_JSON_MESSAGE = "R20_JSON_EXPORTER_FIREFOX_EXPORT_JSON";
+  const FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE =
+    "R20_JSON_EXPORTER_FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS";
+  const FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE =
+    "R20_JSON_EXPORTER_FIREFOX_GET_AVATAR_MAPPINGS";
   const SYSTEM_CLASS_NAMES = ["desc", "emote", "em", "emas"];
   const DICE_TEMPLATE_CLASS_PREFIX = "sheet-rolltemplate-";
   const chatJsonApi =
     typeof module !== "undefined" && module.exports
       ? require("../export/chat_json_export.js")
       : window.Roll20CleanerChatJson || window.Roll20JsonCore?.chatJson || {};
+  const avatarRulesApi =
+    typeof module !== "undefined" && module.exports
+      ? require("../export/avatar_rules.js")
+      : window.Roll20CleanerAvatarRules || {};
+  const avatarLinkMetaApi =
+    typeof module !== "undefined" && module.exports
+      ? require("../export/avatar_link_meta.js")
+      : window.Roll20CleanerAvatarLinkMeta || {};
+  const messageContextApi =
+    typeof module !== "undefined" && module.exports
+      ? require("../export/message_context_parser.js")
+      : window.Roll20CleanerMessageContext || {};
 
   function getDefaultDocument() {
     return typeof document !== "undefined" ? document : null;
@@ -38,6 +54,9 @@
   }
 
   function normalizeSpeakerName(raw) {
+    if (typeof messageContextApi.normalizeSpeakerName === "function") {
+      return messageContextApi.normalizeSpeakerName(raw);
+    }
     const compact = String(raw || "").replace(/\s+/g, " ").trim();
     if (!compact) return "";
     if (/^:+$/.test(compact)) return compact;
@@ -139,6 +158,9 @@
   }
 
   function resolveMessageContext(current, previous) {
+    if (typeof messageContextApi.resolveMessageContext === "function") {
+      return messageContextApi.resolveMessageContext(current, previous);
+    }
     const prev = previous || {};
     const now = current || {};
     const normalizedSpeaker = normalizeSpeakerName(now.speaker || "");
@@ -159,6 +181,9 @@
   }
 
   function shouldInheritMessageContext(role, options = {}) {
+    if (typeof messageContextApi.shouldInheritMessageContext === "function") {
+      return messageContextApi.shouldInheritMessageContext(role, options);
+    }
     if (options.hasDescStyle || options.hasEmoteStyle) return false;
     if (String(role || "").toLowerCase() === "system") return false;
     return true;
@@ -257,9 +282,70 @@
     return Array.from(doc?.querySelectorAll?.("div.message") || []);
   }
 
-  function buildFirefoxExportPayload({ doc = getDefaultDocument() } = {}) {
+  function collectAvatarMappingsFromDoc(doc = getDefaultDocument()) {
+    const messages = collectMessages(doc);
+    const byPair = new Map();
+
+    messages.forEach((messageEl) => {
+      const name = getMessageSpeakerName(messageEl);
+      const avatarImage = getMessageAvatarImage(messageEl);
+      const rawOriginalSrc = String(avatarImage?.getAttribute?.("src") || "").trim();
+      if (!name || !rawOriginalSrc) return;
+
+      const originalUrl = toAbsoluteUrl(rawOriginalSrc, String(doc?.baseURI || ""));
+      if (!originalUrl) return;
+      const redirectedRaw =
+        String(avatarImage?.currentSrc || avatarImage?.src || rawOriginalSrc).trim();
+      const avatarUrl =
+        toAbsoluteUrl(redirectedRaw, String(doc?.baseURI || "")) || originalUrl;
+      const pairKey = `${name}|||${originalUrl}`;
+      if (byPair.has(pairKey)) return;
+
+      byPair.set(pairKey, {
+        id: pairKey,
+        name,
+        avatarUrl,
+        originalUrl,
+      });
+    });
+
+    return Array.from(byPair.values());
+  }
+
+  function buildFirefoxExportPayload({
+    doc = getDefaultDocument(),
+    replacements = [],
+    avatarMappings = null,
+    includeAvatarLinkMeta = false,
+  } = {}) {
     const messages = collectMessages(doc);
     const lines = [];
+    const createAvatarLinkMetaIndex =
+      typeof avatarLinkMetaApi.createAvatarLinkMetaIndex === "function"
+        ? avatarLinkMetaApi.createAvatarLinkMetaIndex
+        : () => ({ byPair: new Map(), byOriginal: new Map() });
+    const resolveAvatarLinkMeta =
+      typeof avatarLinkMetaApi.resolveAvatarLinkMeta === "function"
+        ? avatarLinkMetaApi.resolveAvatarLinkMeta
+        : ({ currentSrc }) => ({
+            originalUrl: String(currentSrc || ""),
+            redirectedUrl: String(currentSrc || ""),
+            effectiveUrl: String(currentSrc || ""),
+          });
+    const replacementMaps =
+      typeof avatarRulesApi.buildReplacementMaps === "function"
+        ? avatarRulesApi.buildReplacementMaps(replacements, {
+            toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
+            normalizeSpeakerName,
+          })
+        : { byPair: new Map(), byOriginal: new Map() };
+    const effectiveAvatarMappings = Array.isArray(avatarMappings)
+      ? avatarMappings
+      : collectAvatarMappingsFromDoc(doc);
+    const avatarLinkMetaIndex = createAvatarLinkMetaIndex(effectiveAvatarMappings, {
+      toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
+      normalizeSpeakerName,
+    });
     let previousMessageContext = {
       speaker: "",
       avatarSrc: "",
@@ -275,7 +361,9 @@
       const rawTimestamp = getMessageTimestamp(messageEl);
       const avatarImage = getMessageAvatarImage(messageEl);
       const rawCurrentSrc = String(avatarImage?.getAttribute?.("src") || "").trim();
-      const currentSrc = rawCurrentSrc ? toAbsoluteUrl(rawCurrentSrc, String(doc?.baseURI || "")) : "";
+      const currentSrc = rawCurrentSrc
+        ? toAbsoluteUrl(rawCurrentSrc, String(doc?.baseURI || ""))
+        : "";
       const canInherit = shouldInheritMessageContext(role, {
         hasDescStyle: hasDescStyle(messageEl),
         hasEmoteStyle: hasEmoteStyle(messageEl),
@@ -294,7 +382,38 @@
         fallbackContext
       );
       const speaker = resolvedContext.speaker;
-      const speakerImageUrl = resolvedContext.speakerImageUrl || resolvedContext.avatarSrc;
+      const replacement =
+        typeof avatarRulesApi.findReplacementForMessage === "function"
+          ? avatarRulesApi.findReplacementForMessage(
+              {
+                name: speaker,
+                currentSrc: resolvedContext.avatarSrc,
+              },
+              replacementMaps,
+              {
+                toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
+                normalizeSpeakerName,
+              }
+            )
+          : "";
+      const avatarLinkMeta = includeAvatarLinkMeta
+        ? resolveAvatarLinkMeta(
+            {
+              speaker,
+              currentSrc: resolvedContext.avatarSrc,
+            },
+            avatarLinkMetaIndex,
+            {
+              toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
+              normalizeSpeakerName,
+            }
+          )
+        : null;
+      const speakerImageUrl =
+        replacement ||
+        avatarLinkMeta?.effectiveUrl ||
+        resolvedContext.speakerImageUrl ||
+        resolvedContext.avatarSrc;
       const effectiveTimestamp = String(resolvedContext.timestamp || "")
         .replace(/\s+/g, " ")
         .trim();
@@ -312,22 +431,32 @@
         messageEl?.getAttribute?.("id") ||
         "";
 
-      lines.push(
-        buildChatJsonEntry({
-          id:
-            typeof chatJsonApi.resolveMessageId === "function"
-              ? chatJsonApi.resolveMessageId({ id: messageId }, index)
-              : String(messageId || index + 1),
-          speaker,
-          role: roleForEntry,
-          timestamp: effectiveTimestamp,
-          textColor: getMessageTextColor(messageEl),
-          text: extractMessageText(messageEl),
-          imageUrl: getInlineMessageImageUrl(messageEl, doc),
-          speakerImageUrl: speakerImageUrl || null,
-          dice,
-        })
-      );
+      const entry = buildChatJsonEntry({
+        id:
+          typeof chatJsonApi.resolveMessageId === "function"
+            ? chatJsonApi.resolveMessageId({ id: messageId }, index)
+            : String(messageId || index + 1),
+        speaker,
+        role: roleForEntry,
+        timestamp: effectiveTimestamp,
+        textColor: getMessageTextColor(messageEl),
+        text: extractMessageText(messageEl),
+        imageUrl: getInlineMessageImageUrl(messageEl, doc),
+        speakerImageUrl: speakerImageUrl || null,
+        dice,
+      });
+      if (
+        includeAvatarLinkMeta &&
+        avatarLinkMeta &&
+        (avatarLinkMeta.originalUrl || avatarLinkMeta.redirectedUrl)
+      ) {
+        entry.input = entry.input && typeof entry.input === "object" ? entry.input : {};
+        entry.input.avatarLinkMeta = {
+          originalUrl: avatarLinkMeta.originalUrl || "",
+          redirectedUrl: avatarLinkMeta.redirectedUrl || "",
+        };
+      }
+      lines.push(entry);
 
       if (canInherit) {
         previousMessageContext = {
@@ -357,15 +486,55 @@
 
   function createRuntimeMessageHandler({
     buildFirefoxExportPayload: buildPayload = buildFirefoxExportPayload,
+    collectAvatarMappingsFromDoc: collectMappings = collectAvatarMappingsFromDoc,
   } = {}) {
     return async (message) => {
       if (message?.type === FIREFOX_PING_MESSAGE) {
         return { ok: true };
       }
 
+      if (message?.type === FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE) {
+        try {
+          return {
+            ok: true,
+            mappings: collectMappings(),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            errorMessage:
+              error?.message
+                ? String(error.message)
+                : "이미지 링크 목록을 불러오는 중 오류가 발생했습니다.",
+          };
+        }
+      }
+
       if (message?.type === FIREFOX_EXPORT_JSON_MESSAGE) {
         try {
-          const payload = buildPayload();
+          const payload = buildPayload({
+            avatarMappings: collectMappings(),
+            includeAvatarLinkMeta: true,
+          });
+          return {
+            ok: true,
+            jsonText: String(payload?.jsonText || ""),
+            filenameBase: String(payload?.filenameBase || "roll20-chat"),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            errorMessage:
+              error?.message ? String(error.message) : "JSON 생성 중 오류가 발생했습니다.",
+          };
+        }
+      }
+
+      if (message?.type === FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE) {
+        try {
+          const payload = buildPayload({
+            replacements: Array.isArray(message?.replacements) ? message.replacements : [],
+          });
           return {
             ok: true,
             jsonText: String(payload?.jsonText || ""),
@@ -392,9 +561,12 @@
     module.exports = {
       FIREFOX_PING_MESSAGE,
       FIREFOX_EXPORT_JSON_MESSAGE,
+      FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
+      FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE,
       parseCampaignNameFromHref,
       extractCampaignNameFromHref,
       buildFirefoxExportPayload,
+      collectAvatarMappingsFromDoc,
       createRuntimeMessageHandler,
     };
   }

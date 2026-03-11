@@ -3,7 +3,12 @@ const assert = require("node:assert/strict");
 
 const {
   buildFirefoxExportPayload,
+  collectAvatarMappingsFromDoc,
   createRuntimeMessageHandler,
+  FIREFOX_EXPORT_JSON_MESSAGE,
+  FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
+  FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE,
+  FIREFOX_PING_MESSAGE,
 } = require("../js/content/core/content.js");
 
 function createClassList(classNames = []) {
@@ -26,7 +31,14 @@ function matchesSelector(tagName, classNames, selector) {
   return false;
 }
 
-function createChild({ tagName = "span", classNames = [], textContent = "", styleColor = "", imgSrc = "" } = {}) {
+function createChild({
+  tagName = "span",
+  classNames = [],
+  textContent = "",
+  styleColor = "",
+  imgSrc = "",
+  imgCurrentSrc = "",
+} = {}) {
   return {
     textContent,
     classList: createClassList(classNames),
@@ -44,6 +56,8 @@ function createChild({ tagName = "span", classNames = [], textContent = "", styl
     querySelector(selector) {
       if (selector === "img" && imgSrc) {
         return {
+          currentSrc: imgCurrentSrc || imgSrc,
+          src: imgCurrentSrc || imgSrc,
           getAttribute(name) {
             return name === "src" ? imgSrc : "";
           },
@@ -61,12 +75,20 @@ function createMessage({
   text = "",
   html = "",
   avatarSrc = "",
+  avatarCurrentSrc = "",
   textColor = "",
   messageId = "",
 } = {}) {
   const children = [];
   if (avatarSrc) {
-    children.push(createChild({ tagName: "div", classNames: ["avatar"], imgSrc: avatarSrc }));
+    children.push(
+      createChild({
+        tagName: "div",
+        classNames: ["avatar"],
+        imgSrc: avatarSrc,
+        imgCurrentSrc: avatarCurrentSrc,
+      })
+    );
   }
   if (speaker) {
     children.push(createChild({ classNames: ["by"], textContent: speaker }));
@@ -177,7 +199,94 @@ test("buildFirefoxExportPayload serializes the current DOM into schema v1 json",
   );
 });
 
-test("runtime message handler returns export payloads and ping responses", async () => {
+test("collectAvatarMappingsFromDoc preserves original and redirected avatar urls", () => {
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP",
+        avatarSrc: "https://app.roll20.net/users/avatar/abc/123",
+        avatarCurrentSrc: "https://cdn.example.com/avatar-final.png",
+      }),
+    ],
+  });
+
+  const mappings = collectAvatarMappingsFromDoc(doc);
+
+  assert.deepEqual(mappings, [
+    {
+      id: "KP|||https://app.roll20.net/users/avatar/abc/123",
+      name: "KP",
+      avatarUrl: "https://cdn.example.com/avatar-final.png",
+      originalUrl: "https://app.roll20.net/users/avatar/abc/123",
+    },
+  ]);
+});
+
+test("buildFirefoxExportPayload direct export keeps redirected avatar and meta", () => {
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP",
+        timestamp: "8:15 PM",
+        text: "테스트",
+        avatarSrc: "https://app.roll20.net/users/avatar/abc/123",
+        avatarCurrentSrc: "https://cdn.example.com/avatar-final.png",
+        messageId: "msg-1",
+      }),
+    ],
+  });
+
+  const payload = buildFirefoxExportPayload({
+    doc,
+    avatarMappings: collectAvatarMappingsFromDoc(doc),
+    includeAvatarLinkMeta: true,
+  });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(
+    parsed.lines[0].input.speakerImages.avatar.url,
+    "https://cdn.example.com/avatar-final.png"
+  );
+  assert.deepEqual(parsed.lines[0].input.avatarLinkMeta, {
+    originalUrl: "https://app.roll20.net/users/avatar/abc/123",
+    redirectedUrl: "https://cdn.example.com/avatar-final.png",
+  });
+});
+
+test("buildFirefoxExportPayload mapped export keeps user replacement", () => {
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP",
+        text: "테스트",
+        avatarSrc: "https://app.roll20.net/users/avatar/abc/123",
+        avatarCurrentSrc: "https://cdn.example.com/avatar-final.png",
+        messageId: "msg-2",
+      }),
+    ],
+  });
+
+  const payload = buildFirefoxExportPayload({
+    doc,
+    replacements: [
+      {
+        id: "KP|||https://app.roll20.net/users/avatar/abc/123",
+        name: "KP",
+        originalUrl: "https://app.roll20.net/users/avatar/abc/123",
+        newUrl: "https://images.example.com/custom-avatar.png",
+      },
+    ],
+  });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(
+    parsed.lines[0].input.speakerImages.avatar.url,
+    "https://images.example.com/custom-avatar.png"
+  );
+  assert.equal(parsed.lines[0].input.avatarLinkMeta, undefined);
+});
+
+test("runtime message handler returns export payloads, mappings, and ping responses", async () => {
   const handler = createRuntimeMessageHandler({
     buildFirefoxExportPayload() {
       return {
@@ -185,13 +294,30 @@ test("runtime message handler returns export payloads and ping responses", async
         filenameBase: "session-a",
       };
     },
+    collectAvatarMappingsFromDoc() {
+      return [{ id: "map-1" }];
+    },
   });
 
-  const ping = await handler({ type: "R20_JSON_EXPORTER_FIREFOX_PING" });
-  const exportResult = await handler({ type: "R20_JSON_EXPORTER_FIREFOX_EXPORT_JSON" });
+  const ping = await handler({ type: FIREFOX_PING_MESSAGE });
+  const mappings = await handler({ type: FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE });
+  const exportResult = await handler({ type: FIREFOX_EXPORT_JSON_MESSAGE });
+  const exportMappedResult = await handler({
+    type: FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
+    replacements: [{ id: "map-1" }],
+  });
 
   assert.deepEqual(ping, { ok: true });
+  assert.deepEqual(mappings, {
+    ok: true,
+    mappings: [{ id: "map-1" }],
+  });
   assert.deepEqual(exportResult, {
+    ok: true,
+    jsonText: '{"schemaVersion":1}',
+    filenameBase: "session-a",
+  });
+  assert.deepEqual(exportMappedResult, {
     ok: true,
     jsonText: '{"schemaVersion":1}',
     filenameBase: "session-a",

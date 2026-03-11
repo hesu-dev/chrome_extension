@@ -1,7 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { getFirefoxExportAction, exportJsonFromActiveTab } = require("../js/popup/popup.js");
+const {
+  FIREFOX_EXPORT_JSON_MESSAGE,
+  FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
+  exportJsonFromActiveTab,
+  getFirefoxExportAction,
+  requestAvatarMappingsFromActiveTab,
+} = require("../js/popup/popup.js");
 
 test("firefox mobile export prefers file download", () => {
   const action = getFirefoxExportAction({ canDownload: true, canShare: true });
@@ -52,7 +58,7 @@ test("firefox mobile export routes the generated JSON through background downloa
       kind: "content",
       tabId: 7,
       message: {
-        type: "R20_JSON_EXPORTER_FIREFOX_EXPORT_JSON",
+        type: FIREFOX_EXPORT_JSON_MESSAGE,
       },
     },
     {
@@ -64,6 +70,53 @@ test("firefox mobile export routes the generated JSON through background downloa
       },
     },
   ]);
+});
+
+test("firefox mobile export can request mapped json with avatar replacements", async () => {
+  const events = [];
+
+  await exportJsonFromActiveTab({
+    exportMessage: {
+      type: FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
+      replacements: [{ id: "row-1", name: "KP" }],
+    },
+    browserApi: {
+      downloads: {
+        download: async () => 1,
+      },
+      tabs: {
+        query: async () => [{ id: 11 }],
+        sendMessage: async (tabId, message) => {
+          events.push({ kind: "content", tabId, message });
+          return {
+            ok: true,
+            jsonText: '{"schemaVersion":1}',
+            filenameBase: "session-d",
+          };
+        },
+      },
+      runtime: {
+        sendMessage: async (message) => {
+          events.push({ kind: "background", message });
+          return {
+            ok: true,
+            filename: "session-d.json",
+          };
+        },
+      },
+    },
+    navigatorApi: {},
+    setStatus() {},
+  });
+
+  assert.deepEqual(events[0], {
+    kind: "content",
+    tabId: 11,
+    message: {
+      type: FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
+      replacements: [{ id: "row-1", name: "KP" }],
+    },
+  });
 });
 
 test("firefox mobile export falls back to share when background download fails", async () => {
@@ -139,4 +192,24 @@ test("firefox mobile export falls back to copy when share also fails", async () 
 
   assert.equal(result.method, "copy");
   assert.equal(copiedText, '{"schemaVersion":1}');
+});
+
+test("firefox mobile can request avatar mappings from the active tab", async () => {
+  const mappings = await requestAvatarMappingsFromActiveTab({
+    browserApi: {
+      tabs: {
+        query: async () => [{ id: 15 }],
+        sendMessage: async (tabId, message) => {
+          assert.equal(tabId, 15);
+          assert.equal(message.type, "R20_JSON_EXPORTER_FIREFOX_GET_AVATAR_MAPPINGS");
+          return {
+            ok: true,
+            mappings: [{ id: "row-1" }],
+          };
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(mappings, [{ id: "row-1" }]);
 });

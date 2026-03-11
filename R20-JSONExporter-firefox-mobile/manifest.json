@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "R20-JSONExporter Firefox Mobile",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "Export a Roll20 chat to JSON on Firefox for Android.",
   "browser_action": {
     "default_title": "R20-JSONExporter",
@@ -29,6 +29,9 @@
         "https://roll20.net/*"
       ],
       "js": [
+        "js/content/export/avatar_rules.js",
+        "js/content/export/avatar_link_meta.js",
+        "js/content/export/message_context_parser.js",
         "js/content/export/parsers/parser_utils.js",
         "js/content/export/parsers/coc/coc_rule_parser.js",
         "js/content/export/parsers/insane/insane_rule_parser.js",
@@ -40,10 +43,10 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "r20-json-exporter-firefox-mobile@local",
-      "gecko_android": {
-        "strict_min_version": "120.0"
-      }
+      "id": "r20-json-exporter-firefox@reha.dev"
+    },
+    "gecko_android": {
+      "strict_min_version": "120.0"
     }
   }
 }
