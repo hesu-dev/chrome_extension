@@ -4,7 +4,7 @@
 
 - Unsigned release package: `/Users/he-su/Desktop/chrome_extension/R20-JSONExporter/release/firefox-mobile.zip`
 - Fixed release ID: `r20-json-exporter-firefox@reha.dev`
-- Current release version: `0.6.0`
+- Current release version: `0.7.0`
 
 ## Sign for self-distribution
 
@@ -45,6 +45,6 @@
 - The popup shows `다운로드전 이미지 링크 확인`.
 - The popup shows `ReadingLog 파일 다운로드`.
 - Direct download works even if the avatar editor was never opened.
-- Direct download stores `input.avatarLinkMeta.originalUrl` and `input.avatarLinkMeta.redirectedUrl`.
+- Direct download stores the redirected avatar URL directly in `input.speakerImages.avatar.url`.
 - Edited avatar mappings override the redirected URL in the exported JSON.
-- The installed add-on version shown in Firefox is `0.6.0`.
+- The installed add-on version shown in Firefox is `0.7.0`.

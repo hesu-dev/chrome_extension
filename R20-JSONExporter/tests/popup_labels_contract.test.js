@@ -17,6 +17,6 @@ test("popup exposes the renamed image-link check and shared ReadingLog download 
   );
 });
 
-test("chrome manifest version is bumped to 0.6.0", () => {
-  assert.equal(manifest.version, "0.6.0");
+test("chrome manifest version is bumped to 0.7.0", () => {
+  assert.equal(manifest.version, "0.7.0");
 });

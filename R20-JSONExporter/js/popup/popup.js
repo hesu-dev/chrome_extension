@@ -435,6 +435,7 @@ function renderAvatarMappings(mappings) {
     input.dataset.id = item.id;
     input.dataset.name = item.name;
     input.dataset.originalUrl = item.originalUrl;
+    input.dataset.avatarUrl = item.avatarUrl;
     input.dataset.initialUrl = item.avatarUrl;
 
     right.appendChild(name);

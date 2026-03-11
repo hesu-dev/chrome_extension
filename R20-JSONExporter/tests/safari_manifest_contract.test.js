@@ -17,6 +17,7 @@ const manifestPath = path.join(
 test("safari source manifest declares popup messaging and native save permissions", () => {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
+  assert.equal(manifest.version, "0.7.0");
   assert.ok(Array.isArray(manifest.permissions));
   assert.ok(manifest.permissions.includes("tabs"));
   assert.ok(manifest.permissions.includes("nativeMessaging"));

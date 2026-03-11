@@ -289,6 +289,12 @@
       const avatarImage = getMessageAvatarImage(messageEl);
       const rawCurrentSrc = String(avatarImage?.getAttribute?.("src") || "").trim();
       const currentSrc = rawCurrentSrc ? toAbsoluteUrl(rawCurrentSrc, String(doc?.baseURI || "")) : "";
+      const rawResolvedAvatarUrl = String(
+        avatarImage?.currentSrc || avatarImage?.src || rawCurrentSrc || ""
+      ).trim();
+      const resolvedAvatarUrl = rawResolvedAvatarUrl
+        ? toAbsoluteUrl(rawResolvedAvatarUrl, String(doc?.baseURI || ""))
+        : "";
       const canInherit = shouldInheritMessageContext(role, {
         hasDescStyle: hasDescStyle(messageEl),
         hasEmoteStyle: hasEmoteStyle(messageEl),
@@ -301,7 +307,7 @@
         {
           speaker: rawSpeaker,
           avatarSrc: currentSrc,
-          speakerImageUrl: currentSrc,
+          speakerImageUrl: resolvedAvatarUrl || currentSrc,
           timestamp: rawTimestamp,
         },
         fallbackContext

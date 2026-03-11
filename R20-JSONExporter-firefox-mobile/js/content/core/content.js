@@ -15,10 +15,6 @@
     typeof module !== "undefined" && module.exports
       ? require("../export/avatar_rules.js")
       : window.Roll20CleanerAvatarRules || {};
-  const avatarLinkMetaApi =
-    typeof module !== "undefined" && module.exports
-      ? require("../export/avatar_link_meta.js")
-      : window.Roll20CleanerAvatarLinkMeta || {};
   const messageContextApi =
     typeof module !== "undefined" && module.exports
       ? require("../export/message_context_parser.js")
@@ -284,7 +280,7 @@
 
   function collectAvatarMappingsFromDoc(doc = getDefaultDocument()) {
     const messages = collectMessages(doc);
-    const byPair = new Map();
+    const byVariant = new Map();
 
     messages.forEach((messageEl) => {
       const name = getMessageSpeakerName(messageEl);
@@ -298,18 +294,18 @@
         String(avatarImage?.currentSrc || avatarImage?.src || rawOriginalSrc).trim();
       const avatarUrl =
         toAbsoluteUrl(redirectedRaw, String(doc?.baseURI || "")) || originalUrl;
-      const pairKey = `${name}|||${originalUrl}`;
-      if (byPair.has(pairKey)) return;
+      const variantKey = `${name}|||${originalUrl}|||${avatarUrl}`;
+      if (byVariant.has(variantKey)) return;
 
-      byPair.set(pairKey, {
-        id: pairKey,
+      byVariant.set(variantKey, {
+        id: variantKey,
         name,
         avatarUrl,
         originalUrl,
       });
     });
 
-    return Array.from(byPair.values());
+    return Array.from(byVariant.values());
   }
 
   function buildFirefoxExportPayload({
@@ -320,32 +316,13 @@
   } = {}) {
     const messages = collectMessages(doc);
     const lines = [];
-    const createAvatarLinkMetaIndex =
-      typeof avatarLinkMetaApi.createAvatarLinkMetaIndex === "function"
-        ? avatarLinkMetaApi.createAvatarLinkMetaIndex
-        : () => ({ byPair: new Map(), byOriginal: new Map() });
-    const resolveAvatarLinkMeta =
-      typeof avatarLinkMetaApi.resolveAvatarLinkMeta === "function"
-        ? avatarLinkMetaApi.resolveAvatarLinkMeta
-        : ({ currentSrc }) => ({
-            originalUrl: String(currentSrc || ""),
-            redirectedUrl: String(currentSrc || ""),
-            effectiveUrl: String(currentSrc || ""),
-          });
     const replacementMaps =
       typeof avatarRulesApi.buildReplacementMaps === "function"
         ? avatarRulesApi.buildReplacementMaps(replacements, {
             toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
             normalizeSpeakerName,
           })
-        : { byPair: new Map(), byOriginal: new Map() };
-    const effectiveAvatarMappings = Array.isArray(avatarMappings)
-      ? avatarMappings
-      : collectAvatarMappingsFromDoc(doc);
-    const avatarLinkMetaIndex = createAvatarLinkMetaIndex(effectiveAvatarMappings, {
-      toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
-      normalizeSpeakerName,
-    });
+        : { byVariant: new Map(), byPair: new Map(), byOriginal: new Map() };
     let previousMessageContext = {
       speaker: "",
       avatarSrc: "",
@@ -364,6 +341,12 @@
       const currentSrc = rawCurrentSrc
         ? toAbsoluteUrl(rawCurrentSrc, String(doc?.baseURI || ""))
         : "";
+      const rawResolvedAvatarUrl = String(
+        avatarImage?.currentSrc || avatarImage?.src || rawCurrentSrc || ""
+      ).trim();
+      const resolvedAvatarUrl = rawResolvedAvatarUrl
+        ? toAbsoluteUrl(rawResolvedAvatarUrl, String(doc?.baseURI || ""))
+        : "";
       const canInherit = shouldInheritMessageContext(role, {
         hasDescStyle: hasDescStyle(messageEl),
         hasEmoteStyle: hasEmoteStyle(messageEl),
@@ -376,18 +359,20 @@
         {
           speaker: rawSpeaker,
           avatarSrc: currentSrc,
-          speakerImageUrl: currentSrc,
+          speakerImageUrl: resolvedAvatarUrl || currentSrc,
           timestamp: rawTimestamp,
         },
         fallbackContext
       );
       const speaker = resolvedContext.speaker;
+      const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || resolvedContext.avatarSrc;
       const replacement =
         typeof avatarRulesApi.findReplacementForMessage === "function"
           ? avatarRulesApi.findReplacementForMessage(
               {
                 name: speaker,
                 currentSrc: resolvedContext.avatarSrc,
+                currentAvatarUrl: effectiveSpeakerImageUrl,
               },
               replacementMaps,
               {
@@ -396,23 +381,9 @@
               }
             )
           : "";
-      const avatarLinkMeta = includeAvatarLinkMeta
-        ? resolveAvatarLinkMeta(
-            {
-              speaker,
-              currentSrc: resolvedContext.avatarSrc,
-            },
-            avatarLinkMetaIndex,
-            {
-              toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
-              normalizeSpeakerName,
-            }
-          )
-        : null;
       const speakerImageUrl =
         replacement ||
-        avatarLinkMeta?.effectiveUrl ||
-        resolvedContext.speakerImageUrl ||
+        effectiveSpeakerImageUrl ||
         resolvedContext.avatarSrc;
       const effectiveTimestamp = String(resolvedContext.timestamp || "")
         .replace(/\s+/g, " ")
@@ -445,17 +416,6 @@
         speakerImageUrl: speakerImageUrl || null,
         dice,
       });
-      if (
-        includeAvatarLinkMeta &&
-        avatarLinkMeta &&
-        (avatarLinkMeta.originalUrl || avatarLinkMeta.redirectedUrl)
-      ) {
-        entry.input = entry.input && typeof entry.input === "object" ? entry.input : {};
-        entry.input.avatarLinkMeta = {
-          originalUrl: avatarLinkMeta.originalUrl || "",
-          redirectedUrl: avatarLinkMeta.redirectedUrl || "",
-        };
-      }
       lines.push(entry);
 
       if (canInherit) {

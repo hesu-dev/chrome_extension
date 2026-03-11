@@ -179,7 +179,7 @@
 
     async function collectAvatarMappingsFromRoot(root, loadedImageUrlMap) {
         const messages = root.querySelectorAll("div.message");
-        const byPair = new Map();
+        const byVariant = new Map();
 
         // 1. Collect all unique pairs first to avoid redundant DOM reads later
         // and identifying unique URLs to resolve.
@@ -224,10 +224,10 @@
                 finalSrc = loadedImageUrlMap.get(absolute);
             }
 
-            const pairKey = `${name}|||${absolute}`;
-            if (!byPair.has(pairKey)) {
-                byPair.set(pairKey, {
-                    id: pairKey,
+            const variantKey = `${name}|||${absolute}|||${finalSrc}`;
+            if (!byVariant.has(variantKey)) {
+                byVariant.set(variantKey, {
+                    id: variantKey,
                     name,
                     avatarUrl: finalSrc,
                     originalUrl: absolute,
@@ -235,7 +235,7 @@
             }
         }
 
-        return Array.from(byPair.values());
+        return Array.from(byVariant.values());
     }
 
     function applyAvatarReplacementsToClone(clone, replacements) {

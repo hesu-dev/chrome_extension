@@ -19,6 +19,9 @@
         id,
         name,
         originalUrl,
+        ...(normalizeUrl(input?.dataset?.avatarUrl)
+          ? { avatarUrl: normalizeUrl(input.dataset.avatarUrl) }
+          : {}),
         newUrl: value,
       });
     });

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "R20 Safari Export",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "Standalone Safari export scaffold for Roll20 chat JSON.",
   "action": {
     "default_popup": "popup.html"

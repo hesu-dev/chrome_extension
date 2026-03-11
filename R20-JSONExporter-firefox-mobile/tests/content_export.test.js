@@ -214,7 +214,7 @@ test("collectAvatarMappingsFromDoc preserves original and redirected avatar urls
 
   assert.deepEqual(mappings, [
     {
-      id: "KP|||https://app.roll20.net/users/avatar/abc/123",
+      id: "KP|||https://app.roll20.net/users/avatar/abc/123|||https://cdn.example.com/avatar-final.png",
       name: "KP",
       avatarUrl: "https://cdn.example.com/avatar-final.png",
       originalUrl: "https://app.roll20.net/users/avatar/abc/123",
@@ -222,7 +222,41 @@ test("collectAvatarMappingsFromDoc preserves original and redirected avatar urls
   ]);
 });
 
-test("buildFirefoxExportPayload direct export keeps redirected avatar and meta", () => {
+test("collectAvatarMappingsFromDoc keeps distinct variants for the same speaker and original url", () => {
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP",
+        avatarSrc: "https://app.roll20.net/users/avatar/abc/123",
+        avatarCurrentSrc: "https://cdn.example.com/avatar-a.png",
+      }),
+      createMessage({
+        speaker: "KP",
+        avatarSrc: "https://app.roll20.net/users/avatar/abc/123",
+        avatarCurrentSrc: "https://cdn.example.com/avatar-b.png",
+      }),
+    ],
+  });
+
+  const mappings = collectAvatarMappingsFromDoc(doc);
+
+  assert.deepEqual(mappings, [
+    {
+      id: "KP|||https://app.roll20.net/users/avatar/abc/123|||https://cdn.example.com/avatar-a.png",
+      name: "KP",
+      avatarUrl: "https://cdn.example.com/avatar-a.png",
+      originalUrl: "https://app.roll20.net/users/avatar/abc/123",
+    },
+    {
+      id: "KP|||https://app.roll20.net/users/avatar/abc/123|||https://cdn.example.com/avatar-b.png",
+      name: "KP",
+      avatarUrl: "https://cdn.example.com/avatar-b.png",
+      originalUrl: "https://app.roll20.net/users/avatar/abc/123",
+    },
+  ]);
+});
+
+test("buildFirefoxExportPayload direct export keeps per-line redirected avatars without metadata output", () => {
   const doc = createDocument({
     messages: [
       createMessage({
@@ -230,27 +264,36 @@ test("buildFirefoxExportPayload direct export keeps redirected avatar and meta",
         timestamp: "8:15 PM",
         text: "테스트",
         avatarSrc: "https://app.roll20.net/users/avatar/abc/123",
-        avatarCurrentSrc: "https://cdn.example.com/avatar-final.png",
+        avatarCurrentSrc: "https://cdn.example.com/avatar-a.png",
         messageId: "msg-1",
+      }),
+      createMessage({
+        speaker: "KP",
+        timestamp: "8:16 PM",
+        text: "다음",
+        avatarSrc: "https://app.roll20.net/users/avatar/abc/123",
+        avatarCurrentSrc: "https://cdn.example.com/avatar-b.png",
+        messageId: "msg-1b",
       }),
     ],
   });
 
   const payload = buildFirefoxExportPayload({
     doc,
-    avatarMappings: collectAvatarMappingsFromDoc(doc),
     includeAvatarLinkMeta: true,
   });
   const parsed = JSON.parse(payload.jsonText);
 
   assert.equal(
     parsed.lines[0].input.speakerImages.avatar.url,
-    "https://cdn.example.com/avatar-final.png"
+    "https://cdn.example.com/avatar-a.png"
   );
-  assert.deepEqual(parsed.lines[0].input.avatarLinkMeta, {
-    originalUrl: "https://app.roll20.net/users/avatar/abc/123",
-    redirectedUrl: "https://cdn.example.com/avatar-final.png",
-  });
+  assert.equal(
+    parsed.lines[1].input.speakerImages.avatar.url,
+    "https://cdn.example.com/avatar-b.png"
+  );
+  assert.equal(parsed.lines[0].input.avatarLinkMeta, undefined);
+  assert.equal(parsed.lines[1].input.avatarLinkMeta, undefined);
 });
 
 test("buildFirefoxExportPayload mapped export keeps user replacement", () => {
@@ -270,9 +313,10 @@ test("buildFirefoxExportPayload mapped export keeps user replacement", () => {
     doc,
     replacements: [
       {
-        id: "KP|||https://app.roll20.net/users/avatar/abc/123",
+        id: "KP|||https://app.roll20.net/users/avatar/abc/123|||https://cdn.example.com/avatar-final.png",
         name: "KP",
         originalUrl: "https://app.roll20.net/users/avatar/abc/123",
+        avatarUrl: "https://cdn.example.com/avatar-final.png",
         newUrl: "https://images.example.com/custom-avatar.png",
       },
     ],
