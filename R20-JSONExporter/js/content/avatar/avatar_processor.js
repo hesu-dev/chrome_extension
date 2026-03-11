@@ -196,7 +196,8 @@
             const absolute = toAbsoluteUrl(src);
             if (!absolute) continue;
 
-            messageData.push({ name, src: absolute });
+            const current = toAbsoluteUrl(imgEl.currentSrc || imgEl.src || absolute);
+            messageData.push({ name, src: absolute, current });
 
             // Only add to pending if we haven't resolved it yet and it looks like a Roll20 URL
             if (isRoll20AvatarUrl(absolute) && !avatarRedirectCache.has(absolute)) {
@@ -213,15 +214,19 @@
         }
 
         // 3. Build the result map using cached/resolved values
-        for (const { name, src } of messageData) {
+        for (const { name, src, current } of messageData) {
             const absolute = toAbsoluteUrl(src);
-            // resolveAvatarUrl now just hits cache or returns absolute if not cached (shouldn't happen for the ones we just did)
-            // But we call it safe:
-            let finalSrc = absolute;
-            if (avatarRedirectCache.has(absolute)) {
-                finalSrc = avatarRedirectCache.get(absolute);
-            } else if (loadedImageUrlMap && loadedImageUrlMap.has(absolute)) {
-                finalSrc = loadedImageUrlMap.get(absolute);
+            let finalSrc = current || absolute;
+            if (!finalSrc || isRoll20AvatarUrl(finalSrc)) {
+                const cached = avatarRedirectCache.get(absolute) || "";
+                if (cached && !isRoll20AvatarUrl(cached)) {
+                    finalSrc = cached;
+                } else if (loadedImageUrlMap && loadedImageUrlMap.has(absolute)) {
+                    const loaded = loadedImageUrlMap.get(absolute) || "";
+                    finalSrc = !loaded || isRoll20AvatarUrl(loaded) ? absolute : loaded;
+                } else {
+                    finalSrc = absolute;
+                }
             }
 
             const variantKey = `${name}|||${absolute}|||${finalSrc}`;
@@ -250,9 +255,10 @@
             const imgEl = getMessageAvatarImg(messageEl);
             if (!name || !imgEl) return;
             const currentSrc = imgEl.getAttribute("src") || "";
+            const currentAvatarUrl = imgEl.currentSrc || imgEl.src || currentSrc;
             const replacement = avatarRules.findReplacementForMessage
                 ? avatarRules.findReplacementForMessage(
-                    { name, currentSrc },
+                    { name, currentSrc, currentAvatarUrl },
                     maps,
                     { toAbsoluteUrl, normalizeSpeakerName }
                 )
@@ -284,14 +290,20 @@
         });
     }
 
-    window.Roll20CleanerAvatar = window.Roll20CleanerAvatar || {};
-    Object.assign(window.Roll20CleanerAvatar, {
+    const api = {
         isRoll20AvatarUrl,
         resolveAvatarUrl,
         resolveAvatarDataUrl,
         collectAvatarMappingsFromRoot,
         applyAvatarReplacementsToClone,
         processAvatarsInClone
-    });
+    };
+
+    if (typeof module !== "undefined" && module.exports) {
+        module.exports = api;
+    }
+
+    window.Roll20CleanerAvatar = window.Roll20CleanerAvatar || {};
+    Object.assign(window.Roll20CleanerAvatar, api);
     console.log("[Roll20Cleaner] Avatar Processor loaded");
 })();
