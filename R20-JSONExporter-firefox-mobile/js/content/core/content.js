@@ -15,6 +15,10 @@
     typeof module !== "undefined" && module.exports
       ? require("../export/avatar_rules.js")
       : window.Roll20CleanerAvatarRules || {};
+  const avatarExportResolutionApi =
+    typeof module !== "undefined" && module.exports
+      ? require("../export/avatar_export_resolution.js")
+      : window.Roll20CleanerAvatarExportResolution || {};
   const messageContextApi =
     typeof module !== "undefined" && module.exports
       ? require("../export/message_context_parser.js")
@@ -316,13 +320,24 @@
   } = {}) {
     const messages = collectMessages(doc);
     const lines = [];
+    const resolvedAvatarMappings =
+      Array.isArray(avatarMappings) && avatarMappings.length
+        ? avatarMappings
+        : collectAvatarMappingsFromDoc(doc);
     const replacementMaps =
-      typeof avatarRulesApi.buildReplacementMaps === "function"
-        ? avatarRulesApi.buildReplacementMaps(replacements, {
-            toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
-            normalizeSpeakerName,
-          })
-        : { byVariant: new Map(), byPair: new Map(), byOriginal: new Map() };
+      typeof avatarExportResolutionApi.createAvatarExportResolutionContext === "function"
+        ? avatarExportResolutionApi.createAvatarExportResolutionContext(
+            {
+              avatarMappings: resolvedAvatarMappings,
+              replacements,
+            },
+            {
+              buildReplacementMaps: avatarRulesApi.buildReplacementMaps,
+              toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
+              normalizeSpeakerName,
+            }
+          )
+        : null;
     let previousMessageContext = {
       speaker: "",
       avatarSrc: "",
@@ -366,9 +381,9 @@
       );
       const speaker = resolvedContext.speaker;
       const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || resolvedContext.avatarSrc;
-      const replacement =
-        typeof avatarRulesApi.findReplacementForMessage === "function"
-          ? avatarRulesApi.findReplacementForMessage(
+      const speakerImageUrl =
+        typeof avatarExportResolutionApi.resolveAvatarExportUrl === "function"
+          ? avatarExportResolutionApi.resolveAvatarExportUrl(
               {
                 name: speaker,
                 currentSrc: resolvedContext.avatarSrc,
@@ -376,15 +391,12 @@
               },
               replacementMaps,
               {
+                findReplacementForMessage: avatarRulesApi.findReplacementForMessage,
                 toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
                 normalizeSpeakerName,
               }
             )
-          : "";
-      const speakerImageUrl =
-        replacement ||
-        effectiveSpeakerImageUrl ||
-        resolvedContext.avatarSrc;
+          : effectiveSpeakerImageUrl || resolvedContext.avatarSrc;
       const effectiveTimestamp = String(resolvedContext.timestamp || "")
         .replace(/\s+/g, " ")
         .trim();

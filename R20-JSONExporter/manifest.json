@@ -55,6 +55,7 @@
         "js/content/avatar/avatar_rules.js",
         "js/content/export/html_chunk_serializer.js",
         "js/content/export/archive_html_sanitizer.js",
+        "js/content/export/avatar_export_resolution.js",
         "js/content/export/avatar_link_meta.js",
         "js/content/export/message_context_parser.js",
         "js/content/avatar/avatar_processor.js",

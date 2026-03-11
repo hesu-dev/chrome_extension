@@ -13,6 +13,7 @@
       ],
       "js": [
         "js/vendor/roll20-json-core.js",
+        "js/avatar_export_resolution.js",
         "js/content.js"
       ],
       "run_at": "document_idle"

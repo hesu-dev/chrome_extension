@@ -16,6 +16,7 @@
 
   const getUtils = () => window.Roll20CleanerUtils || {};
   const getAvatar = () => window.Roll20CleanerAvatar || {};
+  const getAvatarExportResolution = () => window.Roll20CleanerAvatarExportResolution || {};
   const getAvatarRules = () => window.Roll20CleanerAvatarRules || {};
   const getChatJson = () => window.Roll20CleanerChatJson || {};
   const getMessageContext = () => window.Roll20CleanerMessageContext || {};
@@ -742,10 +743,12 @@
     return absolute || null;
   }
 
-  function buildAvatarReplacedChatJson(replacements) {
+  async function buildAvatarReplacedChatJson(replacements) {
     const options =
       arguments.length > 1 && arguments[1] && typeof arguments[1] === "object" ? arguments[1] : {};
     const { toAbsoluteUrl } = getUtils();
+    const { collectAvatarMappingsFromRoot } = getAvatar();
+    const { createAvatarExportResolutionContext, resolveAvatarExportUrl } = getAvatarExportResolution();
     const { buildReplacementMaps, findReplacementForMessage } = getAvatarRules();
     const {
       resolveMessageId,
@@ -815,20 +818,37 @@
             lines: Array.isArray(lines) ? lines : [],
           });
 
-    const maps =
-      typeof buildReplacementMaps === "function"
-        ? buildReplacementMaps(replacements || [], {
-            toAbsoluteUrl: safeToAbsoluteUrl,
-            normalizeSpeakerName,
-          })
-        : { byVariant: new Map(), byPair: new Map(), byOriginal: new Map() };
+    let avatarMappings = Array.isArray(options.avatarMappings) ? options.avatarMappings : [];
+    if (!Array.isArray(options.avatarMappings) && typeof collectAvatarMappingsFromRoot === "function") {
+      try {
+        avatarMappings = await collectAvatarMappingsFromRoot(document);
+      } catch (error) {
+        console.warn("[Roll20Cleaner] Failed to resolve avatar mappings for JSON export:", error);
+        avatarMappings = [];
+      }
+    }
+    const exportResolutionContext =
+      typeof createAvatarExportResolutionContext === "function"
+        ? createAvatarExportResolutionContext(
+            {
+              avatarMappings,
+              replacements: replacements || [],
+            },
+            {
+              buildReplacementMaps,
+              toAbsoluteUrl: safeToAbsoluteUrl,
+              normalizeSpeakerName,
+            }
+          )
+        : null;
 
     const messages =
       typeof collectJsonExportMessages === "function"
         ? collectJsonExportMessages(document)
         : Array.from(document.querySelectorAll("div.message"));
     let previousMessageContext = { speaker: "", avatarSrc: "", speakerImageUrl: "", timestamp: "" };
-    const rows = messages.map((messageEl, index) => {
+    const rows = [];
+    for (const [index, messageEl] of messages.entries()) {
       const role =
         typeof resolveRoleForMessage === "function"
           ? resolveRoleForMessage(messageEl)
@@ -880,21 +900,22 @@
       const effectiveCurrentSrc = resolvedContext.avatarSrc;
       const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || effectiveCurrentSrc;
       const effectiveTimestamp = String(resolvedContext.timestamp || "").replace(/\s+/g, " ").trim();
-      const replacement =
-        typeof findReplacementForMessage === "function"
-          ? findReplacementForMessage(
+      const imageUrl =
+        typeof resolveAvatarExportUrl === "function"
+          ? resolveAvatarExportUrl(
               {
                 name: speaker,
                 currentSrc: effectiveCurrentSrc,
                 currentAvatarUrl: effectiveSpeakerImageUrl,
               },
-              maps,
-              { toAbsoluteUrl: safeToAbsoluteUrl, normalizeSpeakerName }
+              exportResolutionContext,
+              {
+                findReplacementForMessage,
+                toAbsoluteUrl: safeToAbsoluteUrl,
+                normalizeSpeakerName,
+              }
             )
-          : "";
-      const imageUrl =
-        replacement ||
-        effectiveSpeakerImageUrl;
+          : effectiveSpeakerImageUrl;
       if (canInherit) {
         previousMessageContext = {
           speaker,
@@ -929,8 +950,8 @@
         speakerImageUrl: imageUrl || null,
         dice,
       });
-      return entry;
-    });
+      rows.push(entry);
+    }
 
     const exportDocument = safeBuildChatJsonDocument({
       scenarioTitle: extractCampaignNameFromHref(),
@@ -1163,19 +1184,20 @@
     }
 
     if (message?.type === "DOWNLOAD_WITH_AVATAR_REPLACEMENTS_JSON") {
-      try {
-        const jsonText = buildAvatarReplacedChatJson(message?.replacements || []);
-        if (downloadTextFileInPage) {
-          downloadTextFileInPage(jsonText, getDownloadNameBase(), "json", "application/json;charset=utf-8");
-        }
-        sendResponse({ ok: true });
-      } catch (error) {
-        console.error(error);
-        sendResponse({
-          ok: false,
-          errorMessage: error?.message ? String(error.message) : "JSON 생성 중 오류가 발생했습니다.",
+      buildAvatarReplacedChatJson(message?.replacements || [])
+        .then((jsonText) => {
+          if (downloadTextFileInPage) {
+            downloadTextFileInPage(jsonText, getDownloadNameBase(), "json", "application/json;charset=utf-8");
+          }
+          sendResponse({ ok: true });
+        })
+        .catch((error) => {
+          console.error(error);
+          sendResponse({
+            ok: false,
+            errorMessage: error?.message ? String(error.message) : "JSON 생성 중 오류가 발생했습니다.",
+          });
         });
-      }
       return true;
     }
 

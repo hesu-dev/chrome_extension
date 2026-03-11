@@ -30,6 +30,7 @@
       ],
       "js": [
         "js/content/export/avatar_rules.js",
+        "js/content/export/avatar_export_resolution.js",
         "js/content/export/avatar_link_meta.js",
         "js/content/export/message_context_parser.js",
         "js/content/export/parsers/parser_utils.js",

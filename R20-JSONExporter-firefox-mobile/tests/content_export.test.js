@@ -296,6 +296,42 @@ test("buildFirefoxExportPayload direct export keeps per-line redirected avatars 
   assert.equal(parsed.lines[1].input.avatarLinkMeta, undefined);
 });
 
+test("buildFirefoxExportPayload uses resolved avatar mappings when the DOM avatar src is still a Roll20 url", () => {
+  const originalUrl = "https://app.roll20.net/users/avatar/3307646/30";
+  const redirectedUrl =
+    "https://secure.gravatar.com/avatar/0f022f1bc6083b4deaa6b01160e1e7b5?d=identicon&size=30";
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "cang",
+        timestamp: "February 08, 2026 1:25PM",
+        text: "와앙 어소세요",
+        avatarSrc: "/users/avatar/3307646/30",
+        avatarCurrentSrc: "",
+        messageId: "msg-cang",
+      }),
+    ],
+  });
+
+  const payload = buildFirefoxExportPayload({
+    doc,
+    avatarMappings: [
+      {
+        id: `cang|||${originalUrl}|||${redirectedUrl}`,
+        name: "cang",
+        originalUrl,
+        avatarUrl: redirectedUrl,
+      },
+    ],
+  });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(
+    parsed.lines[0].input.speakerImages.avatar.url,
+    redirectedUrl
+  );
+});
+
 test("buildFirefoxExportPayload mapped export keeps user replacement", () => {
   const doc = createDocument({
     messages: [
