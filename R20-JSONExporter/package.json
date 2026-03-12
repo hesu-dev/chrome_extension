@@ -8,7 +8,7 @@
     "watch": "chokidar \"manifest.json\" \"popup.html\" \"css/**/*\" \"js/**/*\" \"scripts/**/*\" \"../roll20-json-core/src/**/*\" -c \"npm run build\"",
     "zip": "node scripts/zip.mjs",
     "source:zip": "node scripts/source_submission.mjs",
-    "build:release": "npm run build && npm run zip"
+    "build:release": "npm run build && npm run zip && npm run source:zip"
   },
   "devDependencies": {
     "chokidar-cli": "^3.0.0"
