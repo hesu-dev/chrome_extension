@@ -21,4 +21,5 @@ test("firefox manifest targets Android self-distribution", () => {
     manifest.browser_specific_settings?.gecko_android?.strict_min_version,
     "120.0"
   );
+  assert.ok(manifest.permissions.includes("clipboardWrite"));
 });

@@ -8,7 +8,14 @@ const {
   FIREFOX_EXPORT_JSON_MESSAGE,
   FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
   FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE,
+  FIREFOX_EXPORT_PROGRESS_MESSAGE,
+  FIREFOX_OPEN_READINGLOG_APP_MESSAGE,
+  FIREFOX_DOWNLOAD_STREAM_START_MESSAGE,
+  FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
+  FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE,
   FIREFOX_PING_MESSAGE,
+  openReadingLogAppFromDocument,
+  streamFirefoxDownloadDocument,
 } = require("../js/content/core/content.js");
 
 function createClassList(classNames = []) {
@@ -184,6 +191,8 @@ test("buildFirefoxExportPayload serializes the current DOM into schema v1 json",
   const parsed = JSON.parse(payload.jsonText);
 
   assert.equal(payload.filenameBase, "세션A");
+  assert.equal(payload.lineCount, 1);
+  assert.ok(payload.jsonByteLength > 0);
   assert.equal(parsed.schemaVersion, 1);
   assert.equal(parsed.ebookView.titlePage.scenarioTitle, "세션A");
   assert.equal(parsed.lines.length, 1);
@@ -366,12 +375,49 @@ test("buildFirefoxExportPayload mapped export keeps user replacement", () => {
   assert.equal(parsed.lines[0].input.avatarLinkMeta, undefined);
 });
 
+test("buildFirefoxExportPayload reports human-readable progress stages", () => {
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP",
+        timestamp: "8:15 PM",
+        text: "테스트",
+        avatarSrc: "https://example.com/avatar.png",
+        messageId: "msg-progress",
+      }),
+    ],
+  });
+  const progressEvents = [];
+
+  const payload = buildFirefoxExportPayload({
+    doc,
+    onProgress(event) {
+      progressEvents.push(event);
+    },
+  });
+
+  assert.deepEqual(progressEvents, [
+    { percent: 10, detail: "프로필 이미지 정보를 확인하는 중입니다." },
+    { percent: 20, detail: "이미지 링크를 정리하는 중입니다." },
+    { percent: 30, detail: "규칙 종류와 대사 개수를 확인하는 중입니다.", lineCount: 1 },
+    { percent: 40, detail: "대사와 주사위 내용을 읽는 중입니다." },
+    {
+      percent: 50,
+      detail: "JSON 파일 내용을 정리하는 중입니다.",
+      jsonByteLength: payload.jsonByteLength,
+      lineCount: 1,
+    },
+  ]);
+});
+
 test("runtime message handler returns export payloads, mappings, and ping responses", async () => {
   const handler = createRuntimeMessageHandler({
     buildFirefoxExportPayload() {
       return {
         jsonText: '{"schemaVersion":1}',
         filenameBase: "session-a",
+        jsonByteLength: 19,
+        lineCount: 1,
       };
     },
     collectAvatarMappingsFromDoc() {
@@ -385,6 +431,7 @@ test("runtime message handler returns export payloads, mappings, and ping respon
   const exportMappedResult = await handler({
     type: FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
     replacements: [{ id: "map-1" }],
+    sessionId: "export-session-1",
   });
 
   assert.deepEqual(ping, { ok: true });
@@ -396,10 +443,289 @@ test("runtime message handler returns export payloads, mappings, and ping respon
     ok: true,
     jsonText: '{"schemaVersion":1}',
     filenameBase: "session-a",
+    jsonByteLength: 19,
+    lineCount: 1,
   });
   assert.deepEqual(exportMappedResult, {
     ok: true,
     jsonText: '{"schemaVersion":1}',
     filenameBase: "session-a",
+    jsonByteLength: 19,
+    lineCount: 1,
   });
+});
+
+test("runtime message handler forwards export progress events to the popup session", async () => {
+  const sentMessages = [];
+  const previousBrowser = global.browser;
+  global.browser = {
+    runtime: {
+      sendMessage(message) {
+        sentMessages.push(message);
+        return Promise.resolve();
+      },
+    },
+  };
+
+  try {
+    const handler = createRuntimeMessageHandler({
+      buildFirefoxExportPayload(options = {}) {
+        options.onProgress?.({
+          percent: 10,
+          detail: "프로필 이미지 정보를 확인하는 중입니다.",
+        });
+        options.onProgress?.({
+          percent: 40,
+          detail: "대사와 주사위 내용을 읽는 중입니다.",
+        });
+        return {
+          jsonText: '{"schemaVersion":1}',
+          filenameBase: "session-a",
+          jsonByteLength: 19,
+          lineCount: 1,
+        };
+      },
+      collectAvatarMappingsFromDoc() {
+        return [];
+      },
+    });
+
+    await handler({
+      type: FIREFOX_EXPORT_JSON_MESSAGE,
+      sessionId: "export-session-1",
+    });
+
+    assert.deepEqual(sentMessages, [
+      {
+        type: FIREFOX_EXPORT_PROGRESS_MESSAGE,
+        sessionId: "export-session-1",
+        percent: 10,
+        detail: "프로필 이미지 정보를 확인하는 중입니다.",
+      },
+      {
+        type: FIREFOX_EXPORT_PROGRESS_MESSAGE,
+        sessionId: "export-session-1",
+        percent: 40,
+        detail: "대사와 주사위 내용을 읽는 중입니다.",
+      },
+    ]);
+  } finally {
+    if (typeof previousBrowser === "undefined") {
+      delete global.browser;
+    } else {
+      global.browser = previousBrowser;
+    }
+  }
+});
+
+test("openReadingLogAppFromDocument injects a page script with the deeplink", async () => {
+  const calls = [];
+  const doc = {
+    documentElement: {
+      appendChild(node) {
+        calls.push({
+          kind: "appendToDocumentElement",
+          tag: node.tagName,
+          textContent: node.textContent,
+        });
+      },
+    },
+    body: {
+      appendChild(node) {
+        calls.push({ kind: "appendChild", href: node.href });
+      },
+    },
+    createElement(tag) {
+      calls.push({ kind: "createElement", tag });
+      return {
+        tagName: String(tag).toUpperCase(),
+        textContent: "",
+        remove() {
+          calls.push({ kind: "remove" });
+        },
+      };
+    },
+  };
+
+  const result = openReadingLogAppFromDocument("readinglog://imports/json", { doc });
+
+  assert.equal(result, "readinglog://imports/json");
+  assert.equal(calls[0].kind, "createElement");
+  assert.equal(calls[0].tag, "script");
+  assert.equal(calls[1].kind, "appendToDocumentElement");
+  assert.equal(calls[1].tag, "SCRIPT");
+  assert.match(calls[1].textContent, /readinglog:\/\/imports\/json/);
+  assert.match(calls[1].textContent, /anchor\.click\(\)/);
+  assert.deepEqual(calls.at(-1), { kind: "remove" });
+});
+
+test("runtime message handler can open ReadingLog from the Roll20 page context", async () => {
+  const calls = [];
+  const handler = createRuntimeMessageHandler({
+    openReadingLogAppFromDocument(url) {
+      calls.push(url);
+      return url;
+    },
+  });
+
+  const result = await handler({
+    type: FIREFOX_OPEN_READINGLOG_APP_MESSAGE,
+    deeplinkUrl: "readinglog://imports/json",
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    deeplinkUrl: "readinglog://imports/json",
+  });
+  assert.deepEqual(calls, ["readinglog://imports/json"]);
+});
+
+test("streamFirefoxDownloadDocument streams JSON chunks directly to the background", async () => {
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+    messages: [
+      createMessage({
+        speaker: "KP",
+        timestamp: "8:15 PM",
+        text: "첫 줄",
+        avatarSrc: "https://example.com/avatar-a.png",
+        messageId: "msg-a",
+      }),
+      createMessage({
+        speaker: "PL",
+        timestamp: "8:16 PM",
+        text: "둘째 줄",
+        avatarSrc: "https://example.com/avatar-b.png",
+        messageId: "msg-b",
+      }),
+    ],
+  });
+  const sentMessages = [];
+  const progressEvents = [];
+
+  const result = await streamFirefoxDownloadDocument({
+    doc,
+    sessionId: "stream-session-1",
+    onProgress(event) {
+      progressEvents.push(event);
+    },
+    browserApi: {
+      runtime: {
+        sendMessage(message) {
+          sentMessages.push(message);
+          if (message.type === FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE) {
+            return Promise.resolve({
+              ok: true,
+              filename: "세션A.json",
+              usedFallbackFilename: false,
+            });
+          }
+          return Promise.resolve({ ok: true });
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    filename: "세션A.json",
+    usedFallbackFilename: false,
+    filenameBase: "세션A",
+    lineCount: 2,
+    jsonByteLength: result.jsonByteLength,
+  });
+  assert.ok(result.jsonByteLength > 0);
+  assert.deepEqual(progressEvents.slice(0, 4), [
+    { percent: 10, detail: "프로필 이미지 정보를 확인하는 중입니다." },
+    { percent: 20, detail: "이미지 링크를 정리하는 중입니다." },
+    { percent: 30, detail: "규칙 종류와 대사 개수를 확인하는 중입니다.", lineCount: 2 },
+    { percent: 40, detail: "대사와 주사위 내용을 읽는 중입니다." },
+  ]);
+  assert.equal(progressEvents.at(-1)?.percent, 99);
+  assert.equal(sentMessages[0].type, FIREFOX_DOWNLOAD_STREAM_START_MESSAGE);
+  assert.equal(sentMessages.at(-1).type, FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE);
+  assert.ok(
+    sentMessages.some(
+      (message) =>
+        message.type === FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE &&
+        String(message.chunkText || "").includes('"schemaVersion":1')
+    )
+  );
+});
+
+test("runtime message handler can save large JSON through background download without returning the full payload", async () => {
+  const sentMessages = [];
+  const handler = createRuntimeMessageHandler({
+    buildFirefoxExportPayload() {
+      throw new Error("full payload builder should not run for streamed downloads");
+    },
+    collectAvatarMappingsFromDoc() {
+      return [];
+    },
+    streamFirefoxDownloadDocument: async ({ sessionId, onProgress }) => {
+      onProgress?.({
+        percent: 50,
+        detail: "파일로 옮길 데이터를 준비하고 있습니다.",
+        lineCount: 1,
+      });
+      sentMessages.push({
+        type: FIREFOX_DOWNLOAD_STREAM_START_MESSAGE,
+        sessionId,
+      });
+      sentMessages.push({
+        type: FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
+        sessionId,
+        chunkText: '{"schemaVersion":1}',
+      });
+      onProgress?.({
+        percent: 99,
+        detail: "파일 데이터를 모두 옮겼습니다. 저장 요청을 준비하고 있습니다.",
+        jsonByteLength: 19,
+        lineCount: 1,
+      });
+      sentMessages.push({
+        type: FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE,
+        sessionId,
+      });
+      return {
+        ok: true,
+        filename: "session-direct.json",
+        usedFallbackFilename: false,
+        filenameBase: "session-direct",
+        jsonByteLength: 19,
+        lineCount: 1,
+      };
+    },
+  });
+
+  const result = await handler({
+    type: FIREFOX_EXPORT_JSON_MESSAGE,
+    sessionId: "export-session-direct",
+    delivery: "background-download",
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    deliveredBy: "background-download",
+    method: "download",
+    filename: "session-direct.json",
+    usedFallbackFilename: false,
+    jsonByteLength: 19,
+    lineCount: 1,
+  });
+  assert.deepEqual(sentMessages, [
+    {
+      type: FIREFOX_DOWNLOAD_STREAM_START_MESSAGE,
+      sessionId: "export-session-direct",
+    },
+    {
+      type: FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
+      sessionId: "export-session-direct",
+      chunkText: '{"schemaVersion":1}',
+    },
+    {
+      type: FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE,
+      sessionId: "export-session-direct",
+    },
+  ]);
 });

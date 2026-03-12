@@ -5,6 +5,16 @@
     "R20_JSON_EXPORTER_FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS";
   const FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE =
     "R20_JSON_EXPORTER_FIREFOX_GET_AVATAR_MAPPINGS";
+  const FIREFOX_EXPORT_PROGRESS_MESSAGE =
+    "R20_JSON_EXPORTER_FIREFOX_EXPORT_PROGRESS";
+  const FIREFOX_OPEN_READINGLOG_APP_MESSAGE =
+    "R20_JSON_EXPORTER_FIREFOX_OPEN_READINGLOG_APP";
+  const FIREFOX_DOWNLOAD_STREAM_START_MESSAGE =
+    "R20_JSON_EXPORTER_FIREFOX_DOWNLOAD_STREAM_START";
+  const FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE =
+    "R20_JSON_EXPORTER_FIREFOX_DOWNLOAD_STREAM_CHUNK";
+  const FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE =
+    "R20_JSON_EXPORTER_FIREFOX_DOWNLOAD_STREAM_FINISH";
   const SYSTEM_CLASS_NAMES = ["desc", "emote", "em", "emas"];
   const DICE_TEMPLATE_CLASS_PREFIX = "sheet-rolltemplate-";
   const chatJsonApi =
@@ -312,14 +322,57 @@
     return Array.from(byVariant.values());
   }
 
-  function buildFirefoxExportPayload({
+  function reportExportProgress(onProgress, percent, detail, extras = {}) {
+    if (typeof onProgress !== "function") return;
+    onProgress({
+      percent,
+      detail,
+      ...extras,
+    });
+  }
+
+  function measureJsonByteLength(text) {
+    const safeText = String(text || "");
+    if (typeof TextEncoder === "function") {
+      return new TextEncoder().encode(safeText).length;
+    }
+    if (typeof Blob !== "undefined") {
+      return new Blob([safeText]).size;
+    }
+    return safeText.length;
+  }
+
+  function createExportProgressNotifier(sessionId, browserApi = typeof browser !== "undefined" ? browser : null) {
+    if (!sessionId || typeof browserApi?.runtime?.sendMessage !== "function") {
+      return null;
+    }
+    return ({ percent = 0, detail = "", ...extras } = {}) =>
+      browserApi.runtime
+        .sendMessage({
+          type: FIREFOX_EXPORT_PROGRESS_MESSAGE,
+          sessionId,
+          percent,
+          detail,
+          ...extras,
+        })
+        .catch?.(() => undefined);
+  }
+
+  function inferFirefoxRuleTypeFromRule(rule = "") {
+    const normalized = String(rule || "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) return "";
+    if (normalized.includes("insane")) return "Insane";
+    if (normalized.includes("coc")) return "COC";
+    return "";
+  }
+
+  function createFirefoxReplacementMaps({
     doc = getDefaultDocument(),
     replacements = [],
     avatarMappings = null,
-    includeAvatarLinkMeta = false,
   } = {}) {
-    const messages = collectMessages(doc);
-    const lines = [];
     const resolvedAvatarMappings =
       Array.isArray(avatarMappings) && avatarMappings.length
         ? avatarMappings
@@ -338,68 +391,21 @@
             }
           )
         : null;
-    let previousMessageContext = {
-      speaker: "",
-      avatarSrc: "",
-      speakerImageUrl: "",
-      timestamp: "",
+    return {
+      avatarMappings: resolvedAvatarMappings,
+      replacementMaps,
     };
+  }
 
-    messages.forEach((messageEl, index) => {
+  function analyzeFirefoxMessagesForStream(messages = []) {
+    let lineCount = 0;
+    let detectedRuleType = "";
+
+    messages.forEach((messageEl) => {
       if (isHiddenPlaceholderMessage(messageEl)) return;
-
+      lineCount += 1;
+      if (detectedRuleType) return;
       const role = resolveRoleForMessage(messageEl);
-      const rawSpeaker = getMessageSpeakerName(messageEl);
-      const rawTimestamp = getMessageTimestamp(messageEl);
-      const avatarImage = getMessageAvatarImage(messageEl);
-      const rawCurrentSrc = String(avatarImage?.getAttribute?.("src") || "").trim();
-      const currentSrc = rawCurrentSrc
-        ? toAbsoluteUrl(rawCurrentSrc, String(doc?.baseURI || ""))
-        : "";
-      const rawResolvedAvatarUrl = String(
-        avatarImage?.currentSrc || avatarImage?.src || rawCurrentSrc || ""
-      ).trim();
-      const resolvedAvatarUrl = rawResolvedAvatarUrl
-        ? toAbsoluteUrl(rawResolvedAvatarUrl, String(doc?.baseURI || ""))
-        : "";
-      const canInherit = shouldInheritMessageContext(role, {
-        hasDescStyle: hasDescStyle(messageEl),
-        hasEmoteStyle: hasEmoteStyle(messageEl),
-        hasAvatar: !!avatarImage,
-      });
-      const fallbackContext = canInherit
-        ? previousMessageContext
-        : { speaker: "", avatarSrc: "", speakerImageUrl: "", timestamp: "" };
-      const resolvedContext = resolveMessageContext(
-        {
-          speaker: rawSpeaker,
-          avatarSrc: currentSrc,
-          speakerImageUrl: resolvedAvatarUrl || currentSrc,
-          timestamp: rawTimestamp,
-        },
-        fallbackContext
-      );
-      const speaker = resolvedContext.speaker;
-      const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || resolvedContext.avatarSrc;
-      const speakerImageUrl =
-        typeof avatarExportResolutionApi.resolveAvatarExportUrl === "function"
-          ? avatarExportResolutionApi.resolveAvatarExportUrl(
-              {
-                name: speaker,
-                currentSrc: resolvedContext.avatarSrc,
-                currentAvatarUrl: effectiveSpeakerImageUrl,
-              },
-              replacementMaps,
-              {
-                findReplacementForMessage: avatarRulesApi.findReplacementForMessage,
-                toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
-                normalizeSpeakerName,
-              }
-            )
-          : effectiveSpeakerImageUrl || resolvedContext.avatarSrc;
-      const effectiveTimestamp = String(resolvedContext.timestamp || "")
-        .replace(/\s+/g, " ")
-        .trim();
       const dice =
         typeof chatJsonApi.parseRoll20DicePayload === "function"
           ? chatJsonApi.parseRoll20DicePayload({
@@ -407,58 +413,498 @@
               html: messageEl?.innerHTML || "",
             })
           : null;
-      const roleForEntry = dice ? "dice" : role;
-      const messageId =
-        messageEl?.getAttribute?.("data-messageid") ||
-        messageEl?.id ||
-        messageEl?.getAttribute?.("id") ||
-        "";
-
-      const entry = buildChatJsonEntry({
-        id:
-          typeof chatJsonApi.resolveMessageId === "function"
-            ? chatJsonApi.resolveMessageId({ id: messageId }, index)
-            : String(messageId || index + 1),
-        speaker,
-        role: roleForEntry,
-        timestamp: effectiveTimestamp,
-        textColor: getMessageTextColor(messageEl),
-        text: extractMessageText(messageEl),
-        imageUrl: getInlineMessageImageUrl(messageEl, doc),
-        speakerImageUrl: speakerImageUrl || null,
-        dice,
-      });
-      lines.push(entry);
-
-      if (canInherit) {
-        previousMessageContext = {
-          speaker,
-          avatarSrc: resolvedContext.avatarSrc,
-          speakerImageUrl: speakerImageUrl || "",
-          timestamp: effectiveTimestamp,
-        };
-      }
+      detectedRuleType = inferFirefoxRuleTypeFromRule(dice?.rule || "");
     });
 
+    return {
+      lineCount,
+      ruleType: detectedRuleType,
+    };
+  }
+
+  function buildFirefoxMessageEntry({
+    messageEl,
+    index = 0,
+    doc = getDefaultDocument(),
+    replacementMaps = null,
+    previousMessageContext = {
+      speaker: "",
+      avatarSrc: "",
+      speakerImageUrl: "",
+      timestamp: "",
+    },
+  } = {}) {
+    if (isHiddenPlaceholderMessage(messageEl)) {
+      return {
+        skipped: true,
+        nextContext: previousMessageContext,
+        detectedRuleType: "",
+      };
+    }
+
+    const role = resolveRoleForMessage(messageEl);
+    const rawSpeaker = getMessageSpeakerName(messageEl);
+    const rawTimestamp = getMessageTimestamp(messageEl);
+    const avatarImage = getMessageAvatarImage(messageEl);
+    const rawCurrentSrc = String(avatarImage?.getAttribute?.("src") || "").trim();
+    const currentSrc = rawCurrentSrc ? toAbsoluteUrl(rawCurrentSrc, String(doc?.baseURI || "")) : "";
+    const rawResolvedAvatarUrl = String(
+      avatarImage?.currentSrc || avatarImage?.src || rawCurrentSrc || ""
+    ).trim();
+    const resolvedAvatarUrl = rawResolvedAvatarUrl
+      ? toAbsoluteUrl(rawResolvedAvatarUrl, String(doc?.baseURI || ""))
+      : "";
+    const canInherit = shouldInheritMessageContext(role, {
+      hasDescStyle: hasDescStyle(messageEl),
+      hasEmoteStyle: hasEmoteStyle(messageEl),
+      hasAvatar: !!avatarImage,
+    });
+    const fallbackContext = canInherit
+      ? previousMessageContext
+      : { speaker: "", avatarSrc: "", speakerImageUrl: "", timestamp: "" };
+    const resolvedContext = resolveMessageContext(
+      {
+        speaker: rawSpeaker,
+        avatarSrc: currentSrc,
+        speakerImageUrl: resolvedAvatarUrl || currentSrc,
+        timestamp: rawTimestamp,
+      },
+      fallbackContext
+    );
+    const speaker = resolvedContext.speaker;
+    const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || resolvedContext.avatarSrc;
+    const speakerImageUrl =
+      typeof avatarExportResolutionApi.resolveAvatarExportUrl === "function"
+        ? avatarExportResolutionApi.resolveAvatarExportUrl(
+            {
+              name: speaker,
+              currentSrc: resolvedContext.avatarSrc,
+              currentAvatarUrl: effectiveSpeakerImageUrl,
+            },
+            replacementMaps,
+            {
+              findReplacementForMessage: avatarRulesApi.findReplacementForMessage,
+              toAbsoluteUrl: (value) => toAbsoluteUrl(value, String(doc?.baseURI || "")),
+              normalizeSpeakerName,
+            }
+          )
+        : effectiveSpeakerImageUrl || resolvedContext.avatarSrc;
+    const effectiveTimestamp = String(resolvedContext.timestamp || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const dice =
+      typeof chatJsonApi.parseRoll20DicePayload === "function"
+        ? chatJsonApi.parseRoll20DicePayload({
+            role,
+            html: messageEl?.innerHTML || "",
+          })
+        : null;
+    const roleForEntry = dice ? "dice" : role;
+    const messageId =
+      messageEl?.getAttribute?.("data-messageid") ||
+      messageEl?.id ||
+      messageEl?.getAttribute?.("id") ||
+      "";
+
+    const entry = buildChatJsonEntry({
+      id:
+        typeof chatJsonApi.resolveMessageId === "function"
+          ? chatJsonApi.resolveMessageId({ id: messageId }, index)
+          : String(messageId || index + 1),
+      speaker,
+      role: roleForEntry,
+      timestamp: effectiveTimestamp,
+      textColor: getMessageTextColor(messageEl),
+      text: extractMessageText(messageEl),
+      imageUrl: getInlineMessageImageUrl(messageEl, doc),
+      speakerImageUrl: speakerImageUrl || null,
+      dice,
+    });
+
+    return {
+      skipped: false,
+      entry,
+      detectedRuleType: inferFirefoxRuleTypeFromRule(dice?.rule || ""),
+      nextContext: canInherit
+        ? {
+            speaker,
+            avatarSrc: resolvedContext.avatarSrc,
+            speakerImageUrl: speakerImageUrl || "",
+            timestamp: effectiveTimestamp,
+          }
+        : previousMessageContext,
+    };
+  }
+
+  function buildFirefoxJsonDocumentPrefix({ scenarioTitle = "", ruleType = "" } = {}) {
+    const prefixPayload = {
+      schemaVersion: 1,
+      ebookView: {
+        titlePage: {
+          scenarioTitle: String(scenarioTitle || ""),
+          ruleType: String(ruleType || ""),
+          gm: "",
+          pl: "",
+          writer: "",
+          copyright: "",
+          identifier: "",
+          extraMetaItems: [],
+        },
+      },
+    };
+    return `${JSON.stringify(prefixPayload).replace(/}$/, "")},"lines":[`;
+  }
+
+  function normalizeFirefoxJsonChunk(rawChunk = "") {
+    const safeChunk = String(rawChunk || "");
+    if (typeof chatJsonApi.normalizeImgurLinksInJsonText === "function") {
+      return chatJsonApi.normalizeImgurLinksInJsonText(safeChunk);
+    }
+    return safeChunk;
+  }
+
+  function resolveDownloadTransferStage(
+    progressRatio = 0,
+    { processedLineCount = 0, lineCount = 0 } = {}
+  ) {
+    const ratio = Math.max(0, Math.min(1, Number(progressRatio) || 0));
+    const percent = Math.max(50, Math.min(99, 50 + Math.floor(ratio * 49)));
+    const safeLineCount = Math.max(0, Number(lineCount) || 0);
+    const safeProcessedLineCount = Math.max(0, Number(processedLineCount) || 0);
+    if (ratio >= 1) {
+      return {
+        percent: 99,
+        detail: "파일 데이터를 모두 옮겼습니다. 저장 요청을 준비하고 있습니다.",
+      };
+    }
+    if (safeLineCount > 0 && safeProcessedLineCount > 0) {
+      return {
+        percent,
+        detail: `대사 ${safeLineCount}줄 중 ${Math.min(
+          safeLineCount,
+          safeProcessedLineCount
+        )}줄을 파일에 옮기고 있습니다.`,
+      };
+    }
+    return { percent, detail: "파일로 옮길 데이터를 준비하고 있습니다." };
+  }
+
+  function buildFirefoxExportPayload({
+    doc = getDefaultDocument(),
+    replacements = [],
+    avatarMappings = null,
+    includeAvatarLinkMeta = false,
+    onProgress = null,
+  } = {}) {
+    reportExportProgress(onProgress, 10, "프로필 이미지 정보를 확인하는 중입니다.");
+    const messages = collectMessages(doc);
+    const lines = [];
+    const { replacementMaps } = createFirefoxReplacementMaps({
+      doc,
+      replacements,
+      avatarMappings,
+    });
+    reportExportProgress(
+      onProgress,
+      20,
+      Array.isArray(replacements) && replacements.length > 0
+        ? "바꿀 이미지 링크를 반영하는 중입니다."
+        : "이미지 링크를 정리하는 중입니다."
+    );
+    const analysis = analyzeFirefoxMessagesForStream(messages);
+    reportExportProgress(onProgress, 30, "규칙 종류와 대사 개수를 확인하는 중입니다.", {
+      lineCount: analysis.lineCount,
+    });
+    reportExportProgress(onProgress, 40, "대사와 주사위 내용을 읽는 중입니다.");
+    let previousMessageContext = {
+      speaker: "",
+      avatarSrc: "",
+      speakerImageUrl: "",
+      timestamp: "",
+    };
+    let detectedRuleType = String(analysis.ruleType || "");
+
+    messages.forEach((messageEl, index) => {
+      const messageResult = buildFirefoxMessageEntry({
+        messageEl,
+        index,
+        doc,
+        replacementMaps,
+        previousMessageContext,
+      });
+      previousMessageContext = messageResult.nextContext || previousMessageContext;
+      if (messageResult.skipped) return;
+      if (!detectedRuleType && messageResult.detectedRuleType) {
+        detectedRuleType = messageResult.detectedRuleType;
+      }
+      lines.push(messageResult.entry);
+    });
     const documentPayload = buildChatJsonDocument({
       scenarioTitle: extractCampaignNameFromHref(doc),
       lines,
     });
-    const rawJsonText = JSON.stringify(documentPayload, null, 2);
-    const jsonText =
-      typeof chatJsonApi.normalizeImgurLinksInJsonText === "function"
-        ? chatJsonApi.normalizeImgurLinksInJsonText(rawJsonText)
-        : rawJsonText;
+    if (detectedRuleType) {
+      documentPayload.ebookView.titlePage.ruleType = detectedRuleType;
+    }
+    const rawJsonText = JSON.stringify(documentPayload);
+    const jsonText = normalizeFirefoxJsonChunk(rawJsonText);
+    const jsonByteLength = measureJsonByteLength(jsonText);
+    const lineCount = lines.length;
+    reportExportProgress(onProgress, 50, "JSON 파일 내용을 정리하는 중입니다.", {
+      jsonByteLength,
+      lineCount,
+    });
 
     return {
       jsonText,
       filenameBase: getDownloadNameBase(doc),
+      jsonByteLength,
+      lineCount,
     };
+  }
+
+  async function streamFirefoxDownloadDocument({
+    doc = getDefaultDocument(),
+    replacements = [],
+    avatarMappings = null,
+    sessionId = "",
+    onProgress = null,
+    browserApi = typeof browser !== "undefined" ? browser : null,
+    chunkTargetByteLength = 64 * 1024,
+  } = {}) {
+    const runtimeApi = browserApi?.runtime;
+    if (typeof runtimeApi?.sendMessage !== "function") {
+      throw new Error("다운로드를 준비할 브라우저 API를 찾지 못했습니다.");
+    }
+
+    const safeSessionId = String(sessionId || "").trim();
+    if (!safeSessionId) {
+      throw new Error("다운로드 세션을 찾지 못했습니다.");
+    }
+
+    reportExportProgress(onProgress, 10, "프로필 이미지 정보를 확인하는 중입니다.");
+    const messages = collectMessages(doc);
+    const { replacementMaps } = createFirefoxReplacementMaps({
+      doc,
+      replacements,
+      avatarMappings,
+    });
+    reportExportProgress(
+      onProgress,
+      20,
+      Array.isArray(replacements) && replacements.length > 0
+        ? "바꿀 이미지 링크를 반영하는 중입니다."
+        : "이미지 링크를 정리하는 중입니다."
+    );
+    const analysis = analyzeFirefoxMessagesForStream(messages);
+    reportExportProgress(onProgress, 30, "규칙 종류와 대사 개수를 확인하는 중입니다.", {
+      lineCount: analysis.lineCount,
+    });
+    reportExportProgress(onProgress, 40, "대사와 주사위 내용을 읽는 중입니다.");
+
+    const filenameBase = getDownloadNameBase(doc);
+    ensureStreamResponse(
+      await runtimeApi.sendMessage({
+        type: FIREFOX_DOWNLOAD_STREAM_START_MESSAGE,
+        sessionId: safeSessionId,
+        filenameBase,
+      }),
+      "다운로드를 준비하지 못했습니다."
+    );
+
+    reportExportProgress(onProgress, 50, "파일로 옮길 데이터를 준비하고 있습니다.", {
+      lineCount: analysis.lineCount,
+    });
+
+    let totalByteLength = 0;
+    let pendingChunkParts = [];
+    let pendingChunkByteLength = 0;
+    let previousMessageContext = {
+      speaker: "",
+      avatarSrc: "",
+      speakerImageUrl: "",
+      timestamp: "",
+    };
+    let streamedLineCount = 0;
+    let pendingChunkLineCount = 0;
+    let lastReportedPercent = 50;
+    let isFirstEntry = true;
+
+    const appendChunkText = (value) => {
+      const safeValue = String(value || "");
+      if (!safeValue) return;
+      pendingChunkParts.push(safeValue);
+      const byteLength = measureJsonByteLength(safeValue);
+      pendingChunkByteLength += byteLength;
+      totalByteLength += byteLength;
+    };
+
+    const flushChunk = async ({ reportProgress = false } = {}) => {
+      if (pendingChunkParts.length === 0) return;
+      const chunkText = pendingChunkParts.join("");
+      const chunkLineCount = pendingChunkLineCount;
+      pendingChunkParts = [];
+      pendingChunkByteLength = 0;
+      pendingChunkLineCount = 0;
+      ensureStreamResponse(
+        await runtimeApi.sendMessage({
+          type: FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
+          sessionId: safeSessionId,
+          chunkText,
+        }),
+        "다운로드용 데이터를 저장하지 못했습니다."
+      );
+      streamedLineCount += chunkLineCount;
+      if (reportProgress) {
+        const stage = resolveDownloadTransferStage(
+          analysis.lineCount > 0 ? streamedLineCount / analysis.lineCount : 1,
+          {
+            processedLineCount: streamedLineCount,
+            lineCount: analysis.lineCount,
+          }
+        );
+        if (stage.percent !== lastReportedPercent || stage.percent === 99) {
+          lastReportedPercent = stage.percent;
+          reportExportProgress(onProgress, stage.percent, stage.detail, {
+            lineCount: analysis.lineCount,
+            jsonByteLength: totalByteLength,
+          });
+        }
+      }
+    };
+
+    // Re-run the message pass with progress-aware flushing to keep memory lower.
+    pendingChunkParts = [];
+    pendingChunkByteLength = 0;
+    totalByteLength = 0;
+    streamedLineCount = 0;
+    pendingChunkLineCount = 0;
+    lastReportedPercent = 50;
+    isFirstEntry = true;
+    previousMessageContext = {
+      speaker: "",
+      avatarSrc: "",
+      speakerImageUrl: "",
+      timestamp: "",
+    };
+
+    appendChunkText(
+      normalizeFirefoxJsonChunk(
+        buildFirefoxJsonDocumentPrefix({
+          scenarioTitle: extractCampaignNameFromHref(doc),
+          ruleType: analysis.ruleType,
+        })
+      )
+    );
+
+    for (let index = 0; index < messages.length; index += 1) {
+      const messageResult = buildFirefoxMessageEntry({
+        messageEl: messages[index],
+        index,
+        doc,
+        replacementMaps,
+        previousMessageContext,
+      });
+      previousMessageContext = messageResult.nextContext || previousMessageContext;
+      if (messageResult.skipped) continue;
+
+      const entryJson = JSON.stringify(messageResult.entry);
+      appendChunkText(
+        normalizeFirefoxJsonChunk(`${isFirstEntry ? "" : ","}${entryJson}`)
+      );
+      isFirstEntry = false;
+      pendingChunkLineCount += 1;
+      if (pendingChunkByteLength >= chunkTargetByteLength) {
+        await flushChunk({ reportProgress: true });
+      }
+    }
+
+    appendChunkText("]}");
+    await flushChunk({ reportProgress: true });
+    if (analysis.lineCount === 0 || lastReportedPercent < 99) {
+      const finalStage = resolveDownloadTransferStage(1, {
+        processedLineCount: analysis.lineCount,
+        lineCount: analysis.lineCount,
+      });
+      reportExportProgress(onProgress, finalStage.percent, finalStage.detail, {
+        jsonByteLength: totalByteLength,
+        lineCount: analysis.lineCount,
+      });
+    }
+
+    const finishResponse = await runtimeApi.sendMessage({
+      type: FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE,
+      sessionId: safeSessionId,
+    });
+    ensureStreamResponse(finishResponse, "다운로드를 시작하지 못했습니다.");
+
+    return {
+      ok: true,
+      filename: String(finishResponse?.filename || ""),
+      usedFallbackFilename: !!finishResponse?.usedFallbackFilename,
+      filenameBase,
+      jsonByteLength: totalByteLength,
+      lineCount: analysis.lineCount,
+    };
+  }
+
+  function buildReadingLogPageScriptSource(deeplinkUrl = "") {
+    const safeUrl = String(deeplinkUrl || "").trim();
+    if (!safeUrl) {
+      throw new Error("ReadingLog 앱을 열지 못했습니다.");
+    }
+    const serializedUrl = JSON.stringify(safeUrl);
+    return `
+      (() => {
+        const anchor = document.createElement("a");
+        anchor.href = ${serializedUrl};
+        anchor.rel = "noopener";
+        anchor.style.display = "none";
+        document.body.appendChild(anchor);
+        try {
+          anchor.click();
+        } finally {
+          anchor.remove();
+        }
+      })();
+    `;
+  }
+
+  function openReadingLogAppFromDocument(
+    deeplinkUrl = "",
+    { doc = getDefaultDocument() } = {}
+  ) {
+    const safeUrl = String(deeplinkUrl || "").trim();
+    if (!safeUrl) {
+      throw new Error("ReadingLog 앱을 열지 못했습니다.");
+    }
+    if (
+      typeof doc?.createElement !== "function" ||
+      !doc?.body ||
+      typeof doc.body.appendChild !== "function" ||
+      !doc?.documentElement ||
+      typeof doc.documentElement.appendChild !== "function"
+    ) {
+      throw new Error("ReadingLog 앱을 열지 못했습니다.");
+    }
+    const script = doc.createElement("script");
+    script.type = "text/javascript";
+    script.textContent = buildReadingLogPageScriptSource(safeUrl);
+    try {
+      doc.documentElement.appendChild(script);
+      return safeUrl;
+    } finally {
+      if (typeof script.remove === "function") {
+        script.remove();
+      }
+    }
   }
 
   function createRuntimeMessageHandler({
     buildFirefoxExportPayload: buildPayload = buildFirefoxExportPayload,
     collectAvatarMappingsFromDoc: collectMappings = collectAvatarMappingsFromDoc,
+    streamFirefoxDownloadDocument: streamDownload = streamFirefoxDownloadDocument,
+    openReadingLogAppFromDocument: openReadingLogApp = openReadingLogAppFromDocument,
   } = {}) {
     return async (message) => {
       if (message?.type === FIREFOX_PING_MESSAGE) {
@@ -482,16 +928,53 @@
         }
       }
 
+      if (message?.type === FIREFOX_OPEN_READINGLOG_APP_MESSAGE) {
+        try {
+          return {
+            ok: true,
+            deeplinkUrl: openReadingLogApp(String(message?.deeplinkUrl || "")),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            errorMessage:
+              error?.message ? String(error.message) : "ReadingLog 앱을 열지 못했습니다.",
+          };
+        }
+      }
+
       if (message?.type === FIREFOX_EXPORT_JSON_MESSAGE) {
         try {
+          const notifyProgress = createExportProgressNotifier(String(message?.sessionId || ""));
+          const avatarMappings = collectMappings();
+          if (message?.delivery === "background-download") {
+            const downloadResult = await streamDownload({
+              avatarMappings,
+              sessionId: String(message?.sessionId || ""),
+              onProgress: notifyProgress,
+              browserApi: typeof browser !== "undefined" ? browser : null,
+            });
+            return {
+              ok: true,
+              deliveredBy: "background-download",
+              method: "download",
+              filename: String(downloadResult?.filename || ""),
+              usedFallbackFilename: !!downloadResult?.usedFallbackFilename,
+              jsonByteLength: Number(downloadResult?.jsonByteLength || 0),
+              lineCount: Number(downloadResult?.lineCount || 0),
+            };
+          }
           const payload = buildPayload({
-            avatarMappings: collectMappings(),
+            avatarMappings,
             includeAvatarLinkMeta: true,
+            onProgress: notifyProgress,
           });
           return {
             ok: true,
             jsonText: String(payload?.jsonText || ""),
             filenameBase: String(payload?.filenameBase || "roll20-chat"),
+            jsonByteLength: Number(payload?.jsonByteLength || 0),
+            lineCount: Number(payload?.lineCount || 0),
           };
         } catch (error) {
           return {
@@ -504,13 +987,38 @@
 
       if (message?.type === FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE) {
         try {
+          const notifyProgress = createExportProgressNotifier(String(message?.sessionId || ""));
+          const avatarMappings = collectMappings();
+          const replacements = Array.isArray(message?.replacements) ? message.replacements : [];
+          if (message?.delivery === "background-download") {
+            const downloadResult = await streamDownload({
+              replacements,
+              avatarMappings,
+              sessionId: String(message?.sessionId || ""),
+              onProgress: notifyProgress,
+              browserApi: typeof browser !== "undefined" ? browser : null,
+            });
+            return {
+              ok: true,
+              deliveredBy: "background-download",
+              method: "download",
+              filename: String(downloadResult?.filename || ""),
+              usedFallbackFilename: !!downloadResult?.usedFallbackFilename,
+              jsonByteLength: Number(downloadResult?.jsonByteLength || 0),
+              lineCount: Number(downloadResult?.lineCount || 0),
+            };
+          }
           const payload = buildPayload({
-            replacements: Array.isArray(message?.replacements) ? message.replacements : [],
+            replacements,
+            avatarMappings,
+            onProgress: notifyProgress,
           });
           return {
             ok: true,
             jsonText: String(payload?.jsonText || ""),
             filenameBase: String(payload?.filenameBase || "roll20-chat"),
+            jsonByteLength: Number(payload?.jsonByteLength || 0),
+            lineCount: Number(payload?.lineCount || 0),
           };
         } catch (error) {
           return {
@@ -535,11 +1043,28 @@
       FIREFOX_EXPORT_JSON_MESSAGE,
       FIREFOX_EXPORT_JSON_WITH_AVATAR_REPLACEMENTS_MESSAGE,
       FIREFOX_GET_AVATAR_MAPPINGS_MESSAGE,
+      FIREFOX_EXPORT_PROGRESS_MESSAGE,
+      FIREFOX_OPEN_READINGLOG_APP_MESSAGE,
+      FIREFOX_DOWNLOAD_STREAM_START_MESSAGE,
+      FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
+      FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE,
       parseCampaignNameFromHref,
       extractCampaignNameFromHref,
       buildFirefoxExportPayload,
       collectAvatarMappingsFromDoc,
+      reportExportProgress,
+      measureJsonByteLength,
+      createExportProgressNotifier,
+      buildReadingLogPageScriptSource,
+      openReadingLogAppFromDocument,
+      resolveDownloadTransferStage,
+      streamFirefoxDownloadDocument,
       createRuntimeMessageHandler,
     };
   }
 })();
+    const ensureStreamResponse = (response, fallbackMessage) => {
+      if (response?.ok === false) {
+        throw new Error(response?.errorMessage || fallbackMessage);
+      }
+    };
