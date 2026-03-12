@@ -7,6 +7,8 @@ test("firefox manifest targets Android self-distribution", () => {
   assert.equal(manifest.manifest_version, 2);
   assert.equal(manifest.version, "0.8.0");
   assert.equal(manifest.name, "R20-JSONExporter Mobile");
+  assert.equal(manifest.browser_action?.default_title, "R20-JSONExporter");
+  assert.equal("default_popup" in (manifest.browser_action || {}), false);
   assert.doesNotMatch(manifest.name, /firefox|mozilla/i);
   assert.doesNotMatch(manifest.description, /firefox|mozilla/i);
   assert.equal(
@@ -19,7 +21,7 @@ test("firefox manifest targets Android self-distribution", () => {
   );
   assert.equal(
     manifest.browser_specific_settings?.gecko_android?.strict_min_version,
-    "120.0"
+    "142.0"
   );
   assert.ok(manifest.permissions.includes("clipboardWrite"));
 });

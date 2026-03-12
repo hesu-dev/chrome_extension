@@ -21,7 +21,9 @@ const {
   getFirefoxExportAction,
   measureTextByteLength,
   normalizeFirefoxMobileErrorMessage,
+  readSourceTabIdFromLocation,
   requestAvatarMappingsFromActiveTab,
+  resolveTargetRoll20Tab,
   resolveFileStageTimeoutMs,
   startReadingLogTransferFromPopup,
   streamReadingLogJsonToLocalhost,
@@ -29,6 +31,52 @@ const {
   waitForReadingLogLocalhostReady,
   withTimeout,
 } = require("../js/popup/popup.js");
+
+test("readSourceTabIdFromLocation reads the originating Roll20 tab id from the popup url", () => {
+  assert.equal(
+    readSourceTabIdFromLocation({
+      search: "?sourceTabId=77",
+    }),
+    77
+  );
+  assert.equal(
+    readSourceTabIdFromLocation({
+      search: "?sourceTabId=not-a-number",
+    }),
+    null
+  );
+});
+
+test("resolveTargetRoll20Tab prefers the originating Roll20 tab when popup opened in a tab", async () => {
+  const originalWindow = global.window;
+  global.window = {
+    location: {
+      search: "?sourceTabId=44",
+    },
+  };
+  try {
+    const calls = [];
+    const tab = await resolveTargetRoll20Tab({
+      tabs: {
+        async get(tabId) {
+          calls.push({ kind: "get", tabId });
+          return { id: tabId, url: "https://app.roll20.net/editor/" };
+        },
+        async query() {
+          calls.push({ kind: "query" });
+          return [{ id: 99 }];
+        },
+      },
+    });
+    assert.deepEqual(tab, {
+      id: 44,
+      url: "https://app.roll20.net/editor/",
+    });
+    assert.deepEqual(calls, [{ kind: "get", tabId: 44 }]);
+  } finally {
+    global.window = originalWindow;
+  }
+});
 
 test("firefox mobile clipboard-share flow requires clipboard write support", () => {
   assert.throws(

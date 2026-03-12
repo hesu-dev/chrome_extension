@@ -43,6 +43,34 @@ const avatarEditorEl =
 const avatarListEl =
   typeof document !== "undefined" ? document.getElementById("avatarList") : null;
 
+function readSourceTabIdFromLocation(
+  locationApi = typeof window !== "undefined" ? window.location : null
+) {
+  const search = String(locationApi?.search || "").trim();
+  if (!search) return null;
+  const params = new URLSearchParams(search);
+  const sourceTabId = Number(params.get("sourceTabId"));
+  return Number.isFinite(sourceTabId) ? sourceTabId : null;
+}
+
+async function resolveTargetRoll20Tab(
+  browserApi = typeof browser !== "undefined" ? browser : null
+) {
+  const sourceTabId = readSourceTabIdFromLocation();
+  if (Number.isFinite(sourceTabId) && typeof browserApi?.tabs?.get === "function") {
+    try {
+      const tab = await browserApi.tabs.get(sourceTabId);
+      if (tab?.id) {
+        return tab;
+      }
+    } catch (error) {
+      // Fall back to the current active tab when the original Roll20 tab is gone.
+    }
+  }
+  const [tab] = await browserApi.tabs.query({ active: true, currentWindow: true });
+  return tab || null;
+}
+
 function setStatus(text) {
   if (statusEl) statusEl.textContent = text;
 }
@@ -735,7 +763,7 @@ async function openReadingLogAppFromActiveTab({
   ) {
     throw new Error("ReadingLog 앱을 열 수 없습니다.");
   }
-  const [tab] = await browserApi.tabs.query({ active: true, currentWindow: true });
+  const tab = await resolveTargetRoll20Tab(browserApi);
   if (!tab?.id) {
     throw new Error("현재 열려 있는 Roll20 탭을 찾지 못했습니다.");
   }
@@ -1148,8 +1176,8 @@ async function exportJsonFromActiveTab({
     const activeTabMessage = "현재 열려 있는 Roll20 탭을 확인하고 있습니다.";
     setStatusText(activeTabMessage);
     setProgress(1, activeTabMessage);
-    const [tab] = await withTimeout(
-      browserApi.tabs.query({ active: true, currentWindow: true }),
+    const tab = await withTimeout(
+      resolveTargetRoll20Tab(browserApi),
       timeoutMs.activeTabLookup,
       "현재 열려 있는 Roll20 탭을 찾는 시간이 너무 오래 걸립니다."
     );
@@ -1383,7 +1411,7 @@ function collectChangedAvatarReplacements(rootEl = avatarListEl) {
 async function requestAvatarMappingsFromActiveTab({
   browserApi = typeof browser !== "undefined" ? browser : null,
 } = {}) {
-  const [tab] = await browserApi.tabs.query({ active: true, currentWindow: true });
+  const tab = await resolveTargetRoll20Tab(browserApi);
   if (!tab?.id) {
     throw new Error("활성 탭을 찾지 못했습니다.");
   }
@@ -1421,7 +1449,7 @@ async function handleAvatarMappingClick() {
 }
 
 async function pingActiveTab() {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  const tab = await resolveTargetRoll20Tab(browser);
   if (!tab?.id) {
     setStatus("활성 탭을 찾지 못했습니다.");
     return;
@@ -1514,6 +1542,8 @@ if (typeof module !== "undefined" && module.exports) {
     resolveFileStageTimeoutMs,
     resolveContentBuildTimeoutMs,
     clampProgressPercent,
+    readSourceTabIdFromLocation,
+    resolveTargetRoll20Tab,
     canUseDownloadsApi,
     canUseFileShareApi,
     canUseTextShareApi,

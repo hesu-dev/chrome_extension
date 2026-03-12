@@ -217,6 +217,59 @@
     return READINGLOG_ANDROID_DEEPLINK_URL;
   }
 
+  function buildPopupPageUrl(
+    sourceTabId,
+    {
+      runtimeApi = typeof browser !== "undefined" ? browser.runtime : null,
+    } = {}
+  ) {
+    if (typeof runtimeApi?.getURL !== "function") {
+      throw new Error("팝업 페이지 주소를 만들 수 없습니다.");
+    }
+    const baseUrl = runtimeApi.getURL("popup.html");
+    const safeSourceTabId = Number(sourceTabId);
+    if (!Number.isFinite(safeSourceTabId)) {
+      return baseUrl;
+    }
+    const url = new URL(baseUrl);
+    url.searchParams.set("sourceTabId", String(safeSourceTabId));
+    return url.toString();
+  }
+
+  async function openPopupPageInTab(
+    sourceTabId,
+    {
+      runtimeApi = typeof browser !== "undefined" ? browser.runtime : null,
+      tabsApi = typeof browser !== "undefined" ? browser.tabs : null,
+    } = {}
+  ) {
+    if (typeof tabsApi?.create !== "function") {
+      throw new Error("팝업 페이지를 열 수 없습니다.");
+    }
+    const popupUrl = buildPopupPageUrl(sourceTabId, { runtimeApi });
+    return tabsApi.create({
+      url: popupUrl,
+      active: true,
+    });
+  }
+
+  function registerBrowserActionClickHandler({
+    browserActionApi = typeof browser !== "undefined" ? browser.browserAction : null,
+    runtimeApi = typeof browser !== "undefined" ? browser.runtime : null,
+    tabsApi = typeof browser !== "undefined" ? browser.tabs : null,
+  } = {}) {
+    if (typeof browserActionApi?.onClicked?.addListener !== "function") {
+      return;
+    }
+    browserActionApi.onClicked.addListener(async (tab) => {
+      try {
+        await openPopupPageInTab(tab?.id, { runtimeApi, tabsApi });
+      } catch (error) {
+        // Ignore action-open failures; the button should remain harmless.
+      }
+    });
+  }
+
   async function cleanupReadingLogWakeTabs(
     {
       tabsApi = typeof browser !== "undefined" ? browser.tabs : null,
@@ -636,6 +689,8 @@
     browser.runtime.onMessage.addListener(createBackgroundMessageHandler());
   }
 
+  registerBrowserActionClickHandler();
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       FIREFOX_DOWNLOAD_JSON_MESSAGE,
@@ -646,6 +701,7 @@
       FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
       FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE,
       buildReadingLogWakeUrl,
+      buildPopupPageUrl,
       READINGLOG_ANDROID_LEGACY_INTENT_URL,
       cleanupReadingLogWakeTabs,
       createTransferSessionId,
@@ -657,6 +713,8 @@
       downloadJsonPayload,
       createStreamProgressReporter,
       createReadingLogProgressReporter,
+      openPopupPageInTab,
+      registerBrowserActionClickHandler,
       openReadingLogAppInBackground,
       closeReadingLogWakeTab,
       waitForReadingLogReady,

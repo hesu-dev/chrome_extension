@@ -4,6 +4,7 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const {
   CHROME_RELEASE_ROOT,
+  FIREFOX_WEB_RELEASE_ROOT,
   FIREFOX_RELEASE_ROOT,
   SAFARI_RELEASE_ROOT,
 } = require("./lib/release_layout.js");
@@ -11,7 +12,8 @@ const { rebuildReleaseZip } = require("./lib/release_zip.js");
 
 for (const [label, releaseRoot, zipName] of [
   ["Chrome", CHROME_RELEASE_ROOT, "chrome.zip"],
-  ["Firefox", FIREFOX_RELEASE_ROOT, "firefox-mobile.zip"],
+  ["Firefox web", FIREFOX_WEB_RELEASE_ROOT, "firefox-web.zip"],
+  ["Firefox mobile", FIREFOX_RELEASE_ROOT, "firefox-mobile.zip"],
 ]) {
   if (!releaseRoot) continue;
   const zipPath = path.resolve(releaseRoot, "..", zipName);

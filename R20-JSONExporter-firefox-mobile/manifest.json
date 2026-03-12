@@ -4,8 +4,7 @@
   "version": "0.8.0",
   "description": "Export a Roll20 chat to JSON on Android.",
   "browser_action": {
-    "default_title": "R20-JSONExporter",
-    "default_popup": "popup.html"
+    "default_title": "R20-JSONExporter"
   },
   "background": {
     "scripts": [
@@ -53,7 +52,7 @@
       }
     },
     "gecko_android": {
-      "strict_min_version": "120.0"
+      "strict_min_version": "142.0"
     }
   }
 }

@@ -5,6 +5,7 @@ const {
   FIREFOX_START_READINGLOG_TRANSFER_MESSAGE,
   FIREFOX_EXPORT_JSON_MESSAGE,
   buildDownloadFilename,
+  buildPopupPageUrl,
   buildReadingLogWakeUrl,
   createReadingLogProgressReporter,
   createBackgroundMessageHandler,
@@ -14,7 +15,9 @@ const {
   normalizeFirefoxMobileErrorMessage,
   scheduleObjectUrlRevoke,
   cleanupReadingLogWakeTabs,
+  openPopupPageInTab,
   openReadingLogAppInBackground,
+  registerBrowserActionClickHandler,
   startReadingLogTransferInBackground,
 } = require("../js/background/background.js");
 
@@ -145,6 +148,79 @@ test("buildReadingLogWakeUrl targets the android custom deeplink", () => {
     buildReadingLogWakeUrl(),
     "readinglog://imports/json"
   );
+});
+
+test("buildPopupPageUrl preserves the originating Roll20 tab id", () => {
+  assert.equal(
+    buildPopupPageUrl(17, {
+      runtimeApi: {
+        getURL(pathname) {
+          return `moz-extension://unit-test/${pathname}`;
+        },
+      },
+    }),
+    "moz-extension://unit-test/popup.html?sourceTabId=17"
+  );
+});
+
+test("openPopupPageInTab opens popup.html in a foreground tab", async () => {
+  const calls = [];
+  const created = await openPopupPageInTab(22, {
+    runtimeApi: {
+      getURL(pathname) {
+        return `moz-extension://unit-test/${pathname}`;
+      },
+    },
+    tabsApi: {
+      async create(options) {
+        calls.push(options);
+        return { id: 55, ...options };
+      },
+    },
+  });
+
+  assert.equal(created.id, 55);
+  assert.deepEqual(calls, [
+    {
+      url: "moz-extension://unit-test/popup.html?sourceTabId=22",
+      active: true,
+    },
+  ]);
+});
+
+test("registerBrowserActionClickHandler opens the popup page for the clicked tab", async () => {
+  let clickHandler = null;
+  const opened = [];
+  registerBrowserActionClickHandler({
+    browserActionApi: {
+      onClicked: {
+        addListener(handler) {
+          clickHandler = handler;
+        },
+      },
+    },
+    runtimeApi: {
+      getURL(pathname) {
+        return `moz-extension://unit-test/${pathname}`;
+      },
+    },
+    tabsApi: {
+      async create(options) {
+        opened.push(options);
+        return { id: 99, ...options };
+      },
+    },
+  });
+
+  assert.equal(typeof clickHandler, "function");
+  await clickHandler({ id: 44 });
+
+  assert.deepEqual(opened, [
+    {
+      url: "moz-extension://unit-test/popup.html?sourceTabId=44",
+      active: true,
+    },
+  ]);
 });
 
 test("openReadingLogAppInBackground returns the temporary wake tab id", async () => {

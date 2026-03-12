@@ -5,6 +5,7 @@ const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const REPO_ROOT = path.resolve(PROJECT_ROOT, "..");
 const CORE_ROOT = path.join(REPO_ROOT, "roll20-json-core", "src");
 const CHROME_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "chrome");
+const FIREFOX_WEB_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "firefox-web");
 const FIREFOX_PROJECT_ROOT = path.join(REPO_ROOT, "R20-JSONExporter-firefox-mobile");
 const FIREFOX_RELEASE_ROOT = path.join(PROJECT_ROOT, "release", "firefox-mobile");
 const SAFARI_PROJECT_ROOT = path.join(REPO_ROOT, "R20-JSONExporter-safari-app");
@@ -49,6 +50,26 @@ function getSourceManifest() {
 function getChromeStageManifest() {
   const manifest = getSourceManifest();
   return injectVendorScript(manifest);
+}
+
+function getFirefoxWebStageManifest() {
+  const manifest = injectVendorScript(getSourceManifest());
+  return {
+    ...manifest,
+    background: {
+      ...manifest.background,
+      scripts: ["js/background/background.js"],
+    },
+    browser_specific_settings: {
+      gecko: {
+        id: "r20-json-exporter-firefox@reha.dev",
+        strict_min_version: "140.0",
+        data_collection_permissions: {
+          required: ["none"],
+        },
+      },
+    },
+  };
 }
 
 function getFirefoxSourceManifest() {
@@ -172,6 +193,15 @@ function stageChromeRelease() {
   });
 }
 
+function stageFirefoxWebRelease() {
+  return stageTargetRelease({
+    sourceRoot: PROJECT_ROOT,
+    releaseRoot: FIREFOX_WEB_RELEASE_ROOT,
+    manifest: getFirefoxWebStageManifest(),
+    items: STAGED_ROOT_ITEMS,
+  });
+}
+
 function stageFirefoxRelease() {
   return stageTargetRelease({
     sourceRoot: FIREFOX_PROJECT_ROOT,
@@ -203,6 +233,7 @@ module.exports = {
   REPO_ROOT,
   CORE_ROOT,
   CHROME_RELEASE_ROOT,
+  FIREFOX_WEB_RELEASE_ROOT,
   FIREFOX_PROJECT_ROOT,
   FIREFOX_RELEASE_ROOT,
   SAFARI_PROJECT_ROOT,
@@ -212,11 +243,13 @@ module.exports = {
   shouldSkipCopyEntry,
   getSourceManifest,
   getChromeStageManifest,
+  getFirefoxWebStageManifest,
   getFirefoxSourceManifest,
   getFirefoxStageManifest,
   getSafariSourceMetadata,
   buildSharedCoreBundle,
   stageChromeRelease,
+  stageFirefoxWebRelease,
   stageFirefoxRelease,
   stageSafariRelease,
 };
