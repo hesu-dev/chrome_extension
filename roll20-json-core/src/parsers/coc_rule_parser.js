@@ -26,7 +26,7 @@ function parseCoc1DicePayload(html, template) {
   const { normalizeText, stripHtmlTags, collectTemplateValueCells, extractFirstInteger } = parserUtils;
   const safeHtml = String(html || "");
   const normalizedTemplate = String(template || "").toLowerCase();
-  const allowedTemplates = new Set(["coc", "coc-default"]);
+  const allowedTemplates = new Set(["coc-1", "coc-default"]);
   if (!allowedTemplates.has(normalizedTemplate)) return null;
 
   const captionMatch = safeHtml.match(/<caption[^>]*>([\s\S]*?)<\/caption>/i);
@@ -48,8 +48,15 @@ function parseCoc1DicePayload(html, template) {
 
 function parseCocRowsPayload(html, template) {
   const { normalizeText, stripHtmlTags, collectTemplateRows } = parserUtils;
-  const allowedTemplates = new Set(["coc-dice", "coc-body-hit"]);
-  if (!allowedTemplates.has(String(template || "").toLowerCase())) return null;
+  const normalizedTemplate = String(template || "").toLowerCase();
+  const allowedTemplates = new Map([
+    ["coc-dice-roll", "coc-dice"],
+    ["coc-dice", "coc-dice"],
+    ["coc-body-hit-loc", "coc-body-hit"],
+    ["coc-body-hit", "coc-body-hit"],
+  ]);
+  const outputTemplate = allowedTemplates.get(normalizedTemplate);
+  if (!outputTemplate) return null;
 
   const safeHtml = String(html || "");
   const captionMatch = safeHtml.match(/<caption[^>]*>([\s\S]*?)<\/caption>/i);
@@ -60,7 +67,7 @@ function parseCocRowsPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: String(template || "").toLowerCase(),
+    template: outputTemplate,
     inputs: { title, rows },
   };
 }
@@ -114,8 +121,14 @@ function parseCocBomadnessPayload(html, template) {
     findIntegerFromTextByKeyword,
   } = parserUtils;
   const normalizedTemplate = String(template || "").toLowerCase();
-  const allowedTemplates = new Set(["coc-madness-realtime", "coc-madness-summary"]);
-  if (!allowedTemplates.has(normalizedTemplate)) return null;
+  const allowedTemplates = new Map([
+    ["coc-bomadness-rt", "coc-madness-realtime"],
+    ["coc-madness-realtime", "coc-madness-realtime"],
+    ["coc-bomadness-summ", "coc-madness-summary"],
+    ["coc-madness-summary", "coc-madness-summary"],
+  ]);
+  const outputTemplate = allowedTemplates.get(normalizedTemplate);
+  if (!outputTemplate) return null;
 
   const safeHtml = String(html || "");
   const title = extractCaptionSuffix(extractCaptionText(safeHtml));
@@ -130,7 +143,7 @@ function parseCocBomadnessPayload(html, template) {
   const duration = findIntegerFromTextByKeyword(cells, "duration");
   if (Number.isFinite(duration)) label.duration = duration;
 
-  if (normalizedTemplate === "coc-madness-realtime") {
+  if (outputTemplate === "coc-madness-realtime") {
     const number = findIntegerFromTextByKeyword(cells, "mania number");
     const rounds = findIntegerFromTextByKeyword(cells, "rounds");
     if (Number.isFinite(number)) label.number = number;
@@ -140,7 +153,7 @@ function parseCocBomadnessPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: normalizedTemplate,
+    template: outputTemplate,
     inputs: { title, rows: [{ label }] },
   };
 }
@@ -156,7 +169,9 @@ function mapAttackSkill(caption) {
 function parseCocAttackPayload(html, template) {
   const { extractCaptionText, collectTemplateRowsWithCells, extractFirstInteger, extractAllIntegers } =
     parserUtils;
-  if (String(template || "").toLowerCase() !== "coc-attack-bonus-penalty") return null;
+  const normalizedTemplate = String(template || "").toLowerCase();
+  const allowedTemplates = new Set(["coc-attack", "coc-attack-bonus-penalty"]);
+  if (!allowedTemplates.has(normalizedTemplate)) return null;
   const safeHtml = String(html || "");
   const caption = extractCaptionText(safeHtml);
   const rows = collectTemplateRowsWithCells(safeHtml);
@@ -182,7 +197,9 @@ function parseCocAttackPayload(html, template) {
 
 function parseCocAttackOnePayload(html, template) {
   const { extractCaptionText, collectTemplateRowsWithCells, extractFirstInteger } = parserUtils;
-  if (String(template || "").toLowerCase() !== "coc-attack") return null;
+  const normalizedTemplate = String(template || "").toLowerCase();
+  const allowedTemplates = new Set(["coc-attack-1", "coc-attack"]);
+  if (!allowedTemplates.has(normalizedTemplate)) return null;
   const safeHtml = String(html || "");
   const skill = extractCaptionText(safeHtml);
   const rows = collectTemplateRowsWithCells(safeHtml);
@@ -203,7 +220,9 @@ function parseCocAttackOnePayload(html, template) {
 
 function parseCocPayload(html, template) {
   const { extractCaptionText, collectTemplateRowsWithCells, extractAllIntegers } = parserUtils;
-  if (String(template || "").toLowerCase() !== "coc-bonus-penalty") return null;
+  const normalizedTemplate = String(template || "").toLowerCase();
+  const allowedTemplates = new Set(["coc", "coc-bonus-penalty"]);
+  if (!allowedTemplates.has(normalizedTemplate)) return null;
   const safeHtml = String(html || "");
   const skill = extractCaptionText(safeHtml);
   const rows = collectTemplateRowsWithCells(safeHtml);
@@ -244,19 +263,32 @@ function parseCocBonusPayload(html, template) {
 }
 
 function parseCocRulePayload({ html, template }) {
-  if (template === "coc" || template === "coc-default") {
-    return parseCoc1DicePayload(html, template);
+  const normalizedTemplate = String(template || "").toLowerCase();
+  if (normalizedTemplate === "coc" || normalizedTemplate === "coc-bonus-penalty") {
+    return parseCocPayload(html, normalizedTemplate) || parseCoc1DicePayload(html, normalizedTemplate);
+  }
+  if (normalizedTemplate === "coc-1" || normalizedTemplate === "coc-default") {
+    return parseCoc1DicePayload(html, normalizedTemplate);
   }
   if (template === "coc-bonus") return parseCocBonusPayload(html, template);
-  if (template === "coc-bonus-penalty") return parseCocPayload(html, template);
-  if (template === "coc-attack-bonus-penalty") return parseCocAttackPayload(html, template);
-  if (template === "coc-attack") return parseCocAttackOnePayload(html, template);
-  if (template === "coc-init-stc") return parseCocInitStcPayload(html, template);
-  if (template === "coc-defence-2") return parseCocDefence2Payload(html, template);
-  if (template === "coc-madness-realtime" || template === "coc-madness-summary") {
-    return parseCocBomadnessPayload(html, template);
+  if (normalizedTemplate === "coc-attack" || normalizedTemplate === "coc-attack-bonus-penalty") {
+    return (
+      parseCocAttackPayload(html, normalizedTemplate) ||
+      parseCocAttackOnePayload(html, normalizedTemplate)
+    );
   }
-  return parseCocRowsPayload(html, template);
+  if (normalizedTemplate === "coc-attack-1") return parseCocAttackOnePayload(html, normalizedTemplate);
+  if (normalizedTemplate === "coc-init-stc") return parseCocInitStcPayload(html, normalizedTemplate);
+  if (normalizedTemplate === "coc-defence-2") return parseCocDefence2Payload(html, normalizedTemplate);
+  if (
+    normalizedTemplate === "coc-bomadness-rt" ||
+    normalizedTemplate === "coc-bomadness-summ" ||
+    normalizedTemplate === "coc-madness-realtime" ||
+    normalizedTemplate === "coc-madness-summary"
+  ) {
+    return parseCocBomadnessPayload(html, normalizedTemplate);
+  }
+  return parseCocRowsPayload(html, normalizedTemplate);
 }
 
 module.exports = { parseCocDefaultPayload, parseCocRulePayload };

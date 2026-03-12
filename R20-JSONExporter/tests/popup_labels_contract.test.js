@@ -18,6 +18,6 @@ test("popup exposes the renamed image-link check and shared ReadingLog download 
   assert.match(popupHtml, /js\/popup\/avatar_preview\.js/);
 });
 
-test("chrome manifest version is bumped to 0.7.0", () => {
-  assert.equal(manifest.version, "0.7.0");
+test("chrome manifest version is bumped to 0.8.0", () => {
+  assert.equal(manifest.version, "0.8.0");
 });

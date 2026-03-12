@@ -4,9 +4,9 @@ const assert = require('node:assert/strict');
 const { parseCocRulePayload } = require('../js/content/export/parsers/coc/coc_rule_parser.js');
 const { parseRoll20DicePayload } = require('../js/content/export/chat_json_export.js');
 
-test('coc payload uses inputs.target', () => {
+test('legacy coc-1 input is accepted and exported as coc', () => {
   const html = `
-    <div class="sheet-rolltemplate-coc">
+    <div class="sheet-rolltemplate-coc-1">
       <table>
         <caption>Spot Hidden Roll</caption>
         <tr><td class="sheet-template_value">55</td></tr>
@@ -15,16 +15,16 @@ test('coc payload uses inputs.target', () => {
     </div>
   `;
 
-  const parsed = parseCocRulePayload({ html, template: 'coc' });
+  const parsed = parseCocRulePayload({ html, template: 'coc-1' });
   assert.equal(parsed?.template, 'coc');
   assert.equal(parsed?.inputs?.target, 55);
   assert.equal(parsed?.inputs?.roll, 67);
   assert.ok(!('success' in (parsed?.inputs || {})));
 });
 
-test('coc-attack-bonus-penalty payload uses inputs.target', () => {
+test('legacy coc-attack input is accepted and exported as coc-attack-bonus-penalty', () => {
   const html = `
-    <div class="sheet-rolltemplate-coc-attack-bonus-penalty">
+    <div class="sheet-rolltemplate-coc-attack">
       <table>
         <caption>Rifle</caption>
         <tr>
@@ -43,7 +43,7 @@ test('coc-attack-bonus-penalty payload uses inputs.target', () => {
     </div>
   `;
 
-  const parsed = parseCocRulePayload({ html, template: 'coc-attack-bonus-penalty' });
+  const parsed = parseCocRulePayload({ html, template: 'coc-attack' });
   assert.equal(parsed?.template, 'coc-attack-bonus-penalty');
   assert.equal(parsed?.inputs?.target, 60);
   assert.deepEqual(parsed?.inputs?.rolls, [23]);
@@ -51,9 +51,9 @@ test('coc-attack-bonus-penalty payload uses inputs.target', () => {
   assert.ok(!('success' in (parsed?.inputs || {})));
 });
 
-test('coc-attack payload uses inputs.target', () => {
+test('legacy coc-attack-1 input is accepted and exported as coc-attack', () => {
   const html = `
-    <div class="sheet-rolltemplate-coc-attack">
+    <div class="sheet-rolltemplate-coc-attack-1">
       <table>
         <caption>Knife</caption>
         <tr>
@@ -68,7 +68,7 @@ test('coc-attack payload uses inputs.target', () => {
     </div>
   `;
 
-  const parsed = parseCocRulePayload({ html, template: 'coc-attack' });
+  const parsed = parseCocRulePayload({ html, template: 'coc-attack-1' });
   assert.equal(parsed?.template, 'coc-attack');
   assert.equal(parsed?.inputs?.target, 50);
   assert.deepEqual(parsed?.inputs?.rolls, [50]);
@@ -76,9 +76,9 @@ test('coc-attack payload uses inputs.target', () => {
   assert.ok(!('success' in (parsed?.inputs || {})));
 });
 
-test('coc-bonus-penalty payload uses inputs.target', () => {
+test('legacy coc input is accepted and exported as coc-bonus-penalty', () => {
   const html = `
-    <div class="sheet-rolltemplate-coc-bonus-penalty">
+    <div class="sheet-rolltemplate-coc">
       <table>
         <caption>Listen</caption>
         <tr>
@@ -89,16 +89,16 @@ test('coc-bonus-penalty payload uses inputs.target', () => {
     </div>
   `;
 
-  const parsed = parseCocRulePayload({ html, template: 'coc-bonus-penalty' });
+  const parsed = parseCocRulePayload({ html, template: 'coc' });
   assert.equal(parsed?.template, 'coc-bonus-penalty');
   assert.equal(parsed?.inputs?.target, 42);
   assert.deepEqual(parsed?.inputs?.rolls, [42, 88]);
   assert.ok(!('success' in (parsed?.inputs || {})));
 });
 
-test('coc payload uses the first target value from rendered threshold spans', () => {
+test('legacy coc-1 threshold input is accepted and exported as coc', () => {
   const html = `
-    <div class="sheet-rolltemplate-coc">
+    <div class="sheet-rolltemplate-coc-1">
       <table>
         <caption>운</caption>
         <tbody>
@@ -125,7 +125,7 @@ test('coc payload uses the first target value from rendered threshold spans', ()
     </div>
   `;
 
-  const parsed = parseCocRulePayload({ html, template: 'coc' });
+  const parsed = parseCocRulePayload({ html, template: 'coc-1' });
   assert.deepEqual(parsed, {
     source: 'roll20',
     rule: 'coc7',
@@ -162,9 +162,9 @@ test('coc-bonus payload uses inputs.target', () => {
   assert.ok(!('success' in (parsed?.inputs || {})));
 });
 
-test('coc row templates use the renamed output template values', () => {
+test('legacy coc row templates are accepted and exported with renamed output template values', () => {
   const diceHtml = `
-    <div class="sheet-rolltemplate-coc-dice">
+    <div class="sheet-rolltemplate-coc-dice-roll">
       <table>
         <caption>Dice Roll</caption>
         <tr>
@@ -175,7 +175,7 @@ test('coc row templates use the renamed output template values', () => {
     </div>
   `;
   const bodyHitHtml = `
-    <div class="sheet-rolltemplate-coc-body-hit">
+    <div class="sheet-rolltemplate-coc-body-hit-loc">
       <table>
         <caption>Body Hit</caption>
         <tr>
@@ -187,18 +187,18 @@ test('coc row templates use the renamed output template values', () => {
   `;
 
   assert.equal(
-    parseCocRulePayload({ html: diceHtml, template: 'coc-dice' })?.template,
+    parseCocRulePayload({ html: diceHtml, template: 'coc-dice-roll' })?.template,
     'coc-dice'
   );
   assert.equal(
-    parseCocRulePayload({ html: bodyHitHtml, template: 'coc-body-hit' })?.template,
+    parseCocRulePayload({ html: bodyHitHtml, template: 'coc-body-hit-loc' })?.template,
     'coc-body-hit'
   );
 });
 
-test('coc madness templates use the renamed output template values', () => {
+test('legacy coc madness templates are accepted and exported with renamed output template values', () => {
   const realtimeHtml = `
-    <div class="sheet-rolltemplate-coc-madness-realtime">
+    <div class="sheet-rolltemplate-coc-bomadness-rt">
       <table>
         <caption>Bout Of Madness: Realtime</caption>
         <tr><td class="sheet-template_value">Reactive Action:</td></tr>
@@ -207,7 +207,7 @@ test('coc madness templates use the renamed output template values', () => {
     </div>
   `;
   const summaryHtml = `
-    <div class="sheet-rolltemplate-coc-madness-summary">
+    <div class="sheet-rolltemplate-coc-bomadness-summ">
       <table>
         <caption>Bout Of Madness: Summary</caption>
         <tr><td class="sheet-template_value">Reactive Action:</td></tr>
@@ -217,28 +217,13 @@ test('coc madness templates use the renamed output template values', () => {
   `;
 
   assert.equal(
-    parseCocRulePayload({ html: realtimeHtml, template: 'coc-madness-realtime' })?.template,
+    parseCocRulePayload({ html: realtimeHtml, template: 'coc-bomadness-rt' })?.template,
     'coc-madness-realtime'
   );
   assert.equal(
-    parseCocRulePayload({ html: summaryHtml, template: 'coc-madness-summary' })?.template,
+    parseCocRulePayload({ html: summaryHtml, template: 'coc-bomadness-summ' })?.template,
     'coc-madness-summary'
   );
-});
-
-test('legacy coc template names are ignored', () => {
-  const legacyTemplates = [
-    'coc-1',
-    'coc-attack-1',
-    'coc-body-hit-loc',
-    'coc-dice-roll',
-    'coc-bomadness-rt',
-    'coc-bomadness-summ',
-  ];
-
-  legacyTemplates.forEach((template) => {
-    assert.equal(parseCocRulePayload({ html: `<div class="sheet-rolltemplate-${template}"></div>`, template }), null);
-  });
 });
 
 test('fallback coc-like text uses inputs.target', () => {

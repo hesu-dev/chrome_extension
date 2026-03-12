@@ -5,7 +5,7 @@ const manifest = require("../manifest.json");
 
 test("firefox manifest targets Android self-distribution", () => {
   assert.equal(manifest.manifest_version, 2);
-  assert.equal(manifest.version, "0.7.0");
+  assert.equal(manifest.version, "0.8.0");
   assert.equal(manifest.name, "R20-JSONExporter Mobile");
   assert.doesNotMatch(manifest.name, /firefox|mozilla/i);
   assert.doesNotMatch(manifest.description, /firefox|mozilla/i);

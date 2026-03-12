@@ -208,7 +208,7 @@ test("buildFirefoxExportPayload serializes the current DOM into schema v1 json",
   );
 });
 
-test("collectAvatarMappingsFromDoc preserves original and redirected avatar urls", () => {
+test("collectAvatarMappingsFromDoc preserves original and redirected avatar urls", async () => {
   const doc = createDocument({
     messages: [
       createMessage({
@@ -219,7 +219,7 @@ test("collectAvatarMappingsFromDoc preserves original and redirected avatar urls
     ],
   });
 
-  const mappings = collectAvatarMappingsFromDoc(doc);
+  const mappings = await collectAvatarMappingsFromDoc(doc);
 
   assert.deepEqual(mappings, [
     {
@@ -231,7 +231,7 @@ test("collectAvatarMappingsFromDoc preserves original and redirected avatar urls
   ]);
 });
 
-test("collectAvatarMappingsFromDoc keeps distinct variants for the same speaker and original url", () => {
+test("collectAvatarMappingsFromDoc keeps distinct variants for the same speaker and original url", async () => {
   const doc = createDocument({
     messages: [
       createMessage({
@@ -247,7 +247,7 @@ test("collectAvatarMappingsFromDoc keeps distinct variants for the same speaker 
     ],
   });
 
-  const mappings = collectAvatarMappingsFromDoc(doc);
+  const mappings = await collectAvatarMappingsFromDoc(doc);
 
   assert.deepEqual(mappings, [
     {
@@ -261,6 +261,34 @@ test("collectAvatarMappingsFromDoc keeps distinct variants for the same speaker 
       name: "KP",
       avatarUrl: "https://cdn.example.com/avatar-b.png",
       originalUrl: "https://app.roll20.net/users/avatar/abc/123",
+    },
+  ]);
+});
+
+test("collectAvatarMappingsFromDoc resolves redirected avatar urls when currentSrc is unavailable", async () => {
+  const originalUrl = "https://app.roll20.net/users/avatar/3307646/30";
+  const redirectedUrl =
+    "https://secure.gravatar.com/avatar/4cc5afb1aed693ed41db0792316e621c?d=identicon&size=30";
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "cang",
+        avatarSrc: "/users/avatar/3307646/30",
+        avatarCurrentSrc: "",
+      }),
+    ],
+  });
+
+  const mappings = await collectAvatarMappingsFromDoc(doc, {
+    resolveAvatarUrl: async () => redirectedUrl,
+  });
+
+  assert.deepEqual(mappings, [
+    {
+      id: `cang|||${originalUrl}|||${redirectedUrl}`,
+      name: "cang",
+      avatarUrl: redirectedUrl,
+      originalUrl,
     },
   ]);
 });
@@ -651,6 +679,83 @@ test("streamFirefoxDownloadDocument streams JSON chunks directly to the backgrou
         String(message.chunkText || "").includes('"schemaVersion":1')
     )
   );
+});
+
+test("streamFirefoxDownloadDocument uses the same shared export json as the direct payload", async () => {
+  const originalUrl = "https://app.roll20.net/users/avatar/3307646/30";
+  const redirectedUrl =
+    "https://secure.gravatar.com/avatar/4cc5afb1aed693ed41db0792316e621c?d=identicon&size=30";
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/13052932/%ED%98%BC%EC%84%B8%EA%B8%B0%ED%96%89"],
+    messages: [
+      createMessage({
+        speaker: "cang",
+        timestamp: "February 08, 2026 1:25PM",
+        text: "와앙 어소세요",
+        avatarSrc: "/users/avatar/3307646/30",
+        avatarCurrentSrc: "",
+        messageId: "msg-cang",
+      }),
+    ],
+  });
+  const sentMessages = [];
+  const directPayload = buildFirefoxExportPayload({
+    doc,
+    replacements: [
+      {
+        id: `cang|||${originalUrl}|||${redirectedUrl}`,
+        name: "cang",
+        originalUrl,
+        avatarUrl: redirectedUrl,
+        newUrl: "https://images.example.com/custom-cang.png",
+      },
+    ],
+    avatarMappings: [
+      {
+        id: `cang|||${originalUrl}|||${redirectedUrl}`,
+        name: "cang",
+        originalUrl,
+        avatarUrl: redirectedUrl,
+      },
+    ],
+  });
+
+  await streamFirefoxDownloadDocument({
+    doc,
+    replacements: [
+      {
+        id: `cang|||${originalUrl}|||${redirectedUrl}`,
+        name: "cang",
+        originalUrl,
+        avatarUrl: redirectedUrl,
+        newUrl: "https://images.example.com/custom-cang.png",
+      },
+    ],
+    avatarMappings: [
+      {
+        id: `cang|||${originalUrl}|||${redirectedUrl}`,
+        name: "cang",
+        originalUrl,
+        avatarUrl: redirectedUrl,
+      },
+    ],
+    sessionId: "stream-session-shared",
+    browserApi: {
+      runtime: {
+        sendMessage(message) {
+          sentMessages.push(message);
+          return Promise.resolve({ ok: true, filename: "혼세기행.json" });
+        },
+      },
+    },
+  });
+
+  const streamedJson = sentMessages
+    .filter((message) => message.type === FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE)
+    .map((message) => String(message.chunkText || ""))
+    .join("");
+
+  assert.equal(streamedJson, directPayload.jsonText);
 });
 
 test("runtime message handler can save large JSON through background download without returning the full payload", async () => {

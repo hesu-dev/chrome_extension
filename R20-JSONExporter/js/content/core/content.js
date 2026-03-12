@@ -19,6 +19,7 @@
   const getAvatarExportResolution = () => window.Roll20CleanerAvatarExportResolution || {};
   const getAvatarRules = () => window.Roll20CleanerAvatarRules || {};
   const getChatJson = () => window.Roll20CleanerChatJson || {};
+  const getSharedCore = () => window.Roll20JsonCore || {};
   const getMessageContext = () => window.Roll20CleanerMessageContext || {};
   const getRoleParser = () => window.Roll20CleanerRoleParser || {};
   const getStyle = () => window.Roll20CleanerStyle || {};
@@ -743,7 +744,71 @@
     return absolute || null;
   }
 
-  async function buildAvatarReplacedChatJson(replacements) {
+  function buildJsonExportNormalizedMessages(messages, options = {}) {
+    const { toAbsoluteUrl } = getUtils();
+    const { resolveMessageId, parseRoll20DicePayload, isHiddenMessagePlaceholderText } = getChatJson();
+    const { resolveRoleForMessage } = getRoleParser();
+    const safeToAbsoluteUrl =
+      typeof toAbsoluteUrl === "function" ? toAbsoluteUrl : (value) => String(value || "");
+    const safeResolveMessageId =
+      typeof resolveMessageId === "function"
+        ? resolveMessageId
+        : (message, index) => String(message?.id || index + 1);
+    const safeIsHiddenPlaceholder =
+      typeof isHiddenMessagePlaceholderText === "function"
+        ? isHiddenMessagePlaceholderText
+        : (raw) => String(raw || "").includes("This message has been hidden");
+
+    return (Array.isArray(messages) ? messages : []).map((messageEl, index) => {
+      const role =
+        typeof resolveRoleForMessage === "function"
+          ? resolveRoleForMessage(messageEl)
+          : "character";
+      const rawSpeaker = getMessageSpeakerName(messageEl);
+      const rawTimestamp = getMessageTimestamp(messageEl);
+      const avatarImg = getMessageAvatarImage(messageEl);
+      const rawCurrentSrc = (avatarImg?.getAttribute("src") || "").trim();
+      const currentSrc = rawCurrentSrc ? safeToAbsoluteUrl(rawCurrentSrc) : "";
+      const rawResolvedAvatarUrl = (
+        avatarImg?.currentSrc ||
+        avatarImg?.src ||
+        rawCurrentSrc ||
+        ""
+      ).trim();
+      const resolvedAvatarUrl = rawResolvedAvatarUrl ? safeToAbsoluteUrl(rawResolvedAvatarUrl) : "";
+      const dice =
+        typeof parseRoll20DicePayload === "function"
+          ? parseRoll20DicePayload({
+              role,
+              html: messageEl?.innerHTML || "",
+            })
+          : null;
+      const messageId =
+        messageEl.getAttribute("data-messageid") ||
+        messageEl.id ||
+        messageEl.getAttribute("id") ||
+        "";
+
+      return {
+        id: safeResolveMessageId({ id: messageId }, index),
+        speaker: rawSpeaker,
+        role,
+        timestamp: rawTimestamp,
+        textColor: getMessageTextColor(messageEl),
+        text: extractMessageText(messageEl),
+        imageUrl: getInlineMessageImageUrl(messageEl),
+        avatarOriginalUrl: currentSrc,
+        avatarResolvedUrl: resolvedAvatarUrl,
+        dice,
+        hiddenPlaceholder: safeIsHiddenPlaceholder(messageEl?.textContent || ""),
+        displayNone: false,
+        hasDescStyle: hasDescStyle(messageEl),
+        hasEmoteStyle: hasEmoteStyle(messageEl),
+      };
+    });
+  }
+
+  async function buildAvatarReplacedChatJsonLegacy(replacements) {
     const options =
       arguments.length > 1 && arguments[1] && typeof arguments[1] === "object" ? arguments[1] : {};
     const { toAbsoluteUrl } = getUtils();
@@ -962,6 +1027,79 @@
       return normalizeImgurLinksInJsonText(jsonText);
     }
     return jsonText.replace(/https:\/\/(?:www\.)?imgur\.com\//gi, "https://i.imgur.com/");
+  }
+
+  async function buildAvatarReplacedChatJson(replacements) {
+    const options =
+      arguments.length > 1 && arguments[1] && typeof arguments[1] === "object" ? arguments[1] : {};
+    const { toAbsoluteUrl } = getUtils();
+    const { collectAvatarMappingsFromRoot } = getAvatar();
+    const { createAvatarExportResolutionContext, resolveAvatarExportUrl } =
+      getAvatarExportResolution();
+    const { buildReplacementMaps } = getAvatarRules();
+    const { collectJsonExportMessages } = getChatJson();
+    const sharedCore = getSharedCore();
+    const sharedSnapshotBuilderApi = sharedCore.messageSnapshotBuilder || {};
+    const sharedExportDocumentApi = sharedCore.exportDocumentBuilder || {};
+    const sharedAvatarResolutionApi = sharedCore.avatarResolutionContext || {};
+    const safeToAbsoluteUrl =
+      typeof toAbsoluteUrl === "function" ? toAbsoluteUrl : (value) => String(value || "");
+    const buildSnapshots = sharedSnapshotBuilderApi.buildMessageSnapshots;
+    const buildExportDocument = sharedExportDocumentApi.buildExportDocument;
+    const createResolutionContext =
+      sharedAvatarResolutionApi.createAvatarExportResolutionContext ||
+      createAvatarExportResolutionContext;
+    const resolveSharedAvatarUrl =
+      sharedAvatarResolutionApi.resolveAvatarExportUrl || resolveAvatarExportUrl;
+
+    if (
+      typeof buildSnapshots !== "function" ||
+      typeof buildExportDocument !== "function" ||
+      typeof createResolutionContext !== "function" ||
+      typeof resolveSharedAvatarUrl !== "function"
+    ) {
+      return buildAvatarReplacedChatJsonLegacy(replacements, options);
+    }
+
+    let avatarMappings = Array.isArray(options.avatarMappings) ? options.avatarMappings : [];
+    if (!Array.isArray(options.avatarMappings) && typeof collectAvatarMappingsFromRoot === "function") {
+      try {
+        avatarMappings = await collectAvatarMappingsFromRoot(document);
+      } catch (error) {
+        console.warn("[Roll20Cleaner] Failed to resolve avatar mappings for JSON export:", error);
+        avatarMappings = [];
+      }
+    }
+
+    const avatarResolutionContext = createResolutionContext(
+      {
+        avatarMappings,
+        replacements: replacements || [],
+      },
+      {
+        buildMaps: buildReplacementMaps,
+        toAbsoluteUrl: safeToAbsoluteUrl,
+        normalizeSpeakerName,
+      }
+    );
+    const messages =
+      typeof collectJsonExportMessages === "function"
+        ? collectJsonExportMessages(document)
+        : Array.from(document.querySelectorAll("div.message"));
+    const normalizedMessages = buildJsonExportNormalizedMessages(messages, options);
+    const snapshotResult = buildSnapshots({
+      messages: normalizedMessages,
+      avatarResolutionContext,
+      resolveAvatarUrl: resolveSharedAvatarUrl,
+      toAbsoluteUrl: safeToAbsoluteUrl,
+    });
+    const exportResult = buildExportDocument({
+      scenarioTitle: extractCampaignNameFromHref(),
+      snapshots: snapshotResult.snapshots,
+      compact: false,
+    });
+
+    return String(exportResult?.jsonText || "");
   }
 
   async function buildDirectReadingLogChatJson() {
