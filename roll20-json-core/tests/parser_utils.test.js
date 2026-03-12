@@ -9,7 +9,7 @@ test("toSafeText strips unsupported punctuation but keeps spacing", () => {
 
 test("extractTemplateName reads rolltemplate names", () => {
   assert.equal(
-    parserUtils.extractTemplateName('<div class="sheet-rolltemplate-coc-1"></div>'),
-    "coc-1"
+    parserUtils.extractTemplateName('<div class="sheet-rolltemplate-coc-bonus-penalty"></div>'),
+    "coc-bonus-penalty"
   );
 });

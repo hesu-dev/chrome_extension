@@ -157,14 +157,16 @@ img {
 
 
 
+.sheet-rolltemplate-coc table,
 .sheet-rolltemplate-coc-bonus table,
+.sheet-rolltemplate-coc-bonus-penalty table,
 .sheet-rolltemplate-coc-default table,
-.sheet-rolltemplate-coc-bomadness-summ table,
-.sheet-rolltemplate-coc-bomadness-rt table,
-.sheet-rolltemplate-coc-dice-roll table,
-.sheet-rolltemplate-coc-body-hit-loc table,
+.sheet-rolltemplate-coc-madness-summary table,
+.sheet-rolltemplate-coc-madness-realtime table,
+.sheet-rolltemplate-coc-dice table,
+.sheet-rolltemplate-coc-body-hit table,
 .sheet-rolltemplate-coc-attack table,
-.sheet-rolltemplate-coc-attack-bonus table,
+.sheet-rolltemplate-coc-attack-bonus-penalty table,
 .sheet-rolltemplate-coc-spell-roll table,
 .sheet-rolltemplate-coc-defence-simple table,
 .sheet-rolltemplate-coc-minionattack table,
@@ -180,13 +182,15 @@ table {
   border-collapse: collapse;
 }
 
+.sheet-rolltemplate-coc td,
 .sheet-rolltemplate-coc-bonus td,
+.sheet-rolltemplate-coc-bonus-penalty td,
 .sheet-rolltemplate-coc-default td,
-.sheet-rolltemplate-coc-bomadness-summ td,
-.sheet-rolltemplate-coc-bomadness-rt td,
-.sheet-rolltemplate-coc-dice-roll td,
+.sheet-rolltemplate-coc-madness-summary td,
+.sheet-rolltemplate-coc-madness-realtime td,
+.sheet-rolltemplate-coc-dice td,
 .sheet-rolltemplate-coc-attack td,
-.sheet-rolltemplate-coc-attack-bonus td,
+.sheet-rolltemplate-coc-attack-bonus-penalty td,
 .sheet-rolltemplate-coc-defence-simple td,
 .sheet-rolltemplate-coc-minionattack td,
 .sheet-rolltemplate-coc-vehicleattack td {
@@ -194,14 +198,16 @@ table {
   border-bottom: 1px solid black;
 }
 
+.sheet-rolltemplate-coc caption,
 .sheet-rolltemplate-coc-bonus caption,
+.sheet-rolltemplate-coc-bonus-penalty caption,
 .sheet-rolltemplate-coc-default caption,
-.sheet-rolltemplate-coc-bomadness-summ caption,
-.sheet-rolltemplate-coc-bomadness-rt caption,
-.sheet-rolltemplate-coc-dice-roll caption,
-.sheet-rolltemplate-coc-body-hit-loc caption,
+.sheet-rolltemplate-coc-madness-summary caption,
+.sheet-rolltemplate-coc-madness-realtime caption,
+.sheet-rolltemplate-coc-dice caption,
+.sheet-rolltemplate-coc-body-hit caption,
 .sheet-rolltemplate-coc-attack caption,
-.sheet-rolltemplate-coc-attack-bonus caption,
+.sheet-rolltemplate-coc-attack-bonus-penalty caption,
 .sheet-rolltemplate-coc-spell-roll caption,
 .sheet-rolltemplate-coc-defence-simple caption,
 .sheet-rolltemplate-coc-minionattack caption,
@@ -215,14 +221,16 @@ table {
   line-height: 1.6em;
 }
 
+.sheet-rolltemplate-coc .inlinerollresult,
 .sheet-rolltemplate-coc-bonus .inlinerollresult,
+.sheet-rolltemplate-coc-bonus-penalty .inlinerollresult,
 .sheet-rolltemplate-coc-default .inlinerollresult,
-.sheet-rolltemplate-coc-bomadness-summ .inlinerollresult,
-.sheet-rolltemplate-coc-bomadness-rt .inlinerollresult,
-.sheet-rolltemplate-coc-dice-roll .inlinerollresult,
-.sheet-rolltemplate-coc-body-hit-loc .inlinerollresult,
+.sheet-rolltemplate-coc-madness-summary .inlinerollresult,
+.sheet-rolltemplate-coc-madness-realtime .inlinerollresult,
+.sheet-rolltemplate-coc-dice .inlinerollresult,
+.sheet-rolltemplate-coc-body-hit .inlinerollresult,
 .sheet-rolltemplate-coc-attack .inlinerollresult,
-.sheet-rolltemplate-coc-attack-bonus .inlinerollresult,
+.sheet-rolltemplate-coc-attack-bonus-penalty .inlinerollresult,
 .sheet-rolltemplate-coc-spell-roll .inlinerollresult,
 .sheet-rolltemplate-coc-defence-simple .inlinerollresult,
 .sheet-rolltemplate-coc-minionattack .inlinerollresult,
@@ -234,15 +242,17 @@ table {
   background: #BEBEBE;
 }
 
+.sheet-rolltemplate-coc td.sheet-template_value,
 .sheet-rolltemplate-coc-bonus td.sheet-template_value,
+.sheet-rolltemplate-coc-bonus-penalty td.sheet-template_value,
 .sheet-rolltemplate-coc-default td.sheet-template_value,
-.sheet-rolltemplate-coc-dice-roll td.sheet-template_value,
-.sheet-rolltemplate-coc-body-hit-loc td.sheet-template_value,
+.sheet-rolltemplate-coc-dice td.sheet-template_value,
+.sheet-rolltemplate-coc-body-hit td.sheet-template_value,
 .sheet-rolltemplate-coc-attack td.sheet-template_value,
-.sheet-rolltemplate-coc-attack-bonus td.sheet-template_value,
+.sheet-rolltemplate-coc-attack-bonus-penalty td.sheet-template_value,
 .sheet-rolltemplate-coc-spell-roll td.sheet-template_value,
-.sheet-rolltemplate-coc-bomadness-rt td.sheet-template_value,
-.sheet-rolltemplate-coc-bomadness-summ td.sheet-template_value,
+.sheet-rolltemplate-coc-madness-realtime td.sheet-template_value,
+.sheet-rolltemplate-coc-madness-summary td.sheet-template_value,
 .sheet-rolltemplate-coc-defence-simple td.sheet-template_value,
 .sheet-rolltemplate-coc-minionattack td.sheet-template_value,
 .sheet-rolltemplate-coc-vehicleattack td.sheet-template_value {
@@ -250,13 +260,15 @@ table {
 }
 
 .inlinerollresult,
+.sheet-rolltemplate-coc .inlinerollresult,
+.sheet-rolltemplate-coc-bonus-penalty .inlinerollresult,
 .sheet-rolltemplate-coc-default .inlinerollresult,
-.sheet-rolltemplate-coc-bomadness-summ .inlinerollresult,
-.sheet-rolltemplate-coc-bomadness-rt .inlinerollresult,
-.sheet-rolltemplate-coc-dice-roll .inlinerollresult,
-.sheet-rolltemplate-coc-body-hit-loc .inlinerollresult,
+.sheet-rolltemplate-coc-madness-summary .inlinerollresult,
+.sheet-rolltemplate-coc-madness-realtime .inlinerollresult,
+.sheet-rolltemplate-coc-dice .inlinerollresult,
+.sheet-rolltemplate-coc-body-hit .inlinerollresult,
 .sheet-rolltemplate-coc-attack .inlinerollresult,
-.sheet-rolltemplate-coc-attack-bonus .inlinerollresult,
+.sheet-rolltemplate-coc-attack-bonus-penalty .inlinerollresult,
 .sheet-rolltemplate-coc-spell-roll .inlinerollresult,
 .sheet-rolltemplate-coc-defence-simple .inlinerollresult,
 .sheet-rolltemplate-coc-minionattack .inlinerollresult,
@@ -282,25 +294,6 @@ table {
 .textchatcontainer .desc .by {
   display: none;
 }
-
-.sheet-rolltemplate-coc caption {
-  text-align: center;
-  background: black;
-  color: white;
-  font-weight: bold;
-  padding: 2px;
-  border: 1px solid black;
-  line-height: 1.6em;
-}
-
-.sheet-rolltemplate-coc-1 table {
-  width: 100%;
-  border: 1px solid black;
-  color: black;
-  background: #FFFFFF;
-}
-
-
 
 *,
 *::before,

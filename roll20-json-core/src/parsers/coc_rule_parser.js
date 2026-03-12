@@ -26,7 +26,7 @@ function parseCoc1DicePayload(html, template) {
   const { normalizeText, stripHtmlTags, collectTemplateValueCells, extractFirstInteger } = parserUtils;
   const safeHtml = String(html || "");
   const normalizedTemplate = String(template || "").toLowerCase();
-  const allowedTemplates = new Set(["coc-1", "coc-default"]);
+  const allowedTemplates = new Set(["coc", "coc-default"]);
   if (!allowedTemplates.has(normalizedTemplate)) return null;
 
   const captionMatch = safeHtml.match(/<caption[^>]*>([\s\S]*?)<\/caption>/i);
@@ -48,7 +48,7 @@ function parseCoc1DicePayload(html, template) {
 
 function parseCocRowsPayload(html, template) {
   const { normalizeText, stripHtmlTags, collectTemplateRows } = parserUtils;
-  const allowedTemplates = new Set(["coc-dice-roll", "coc-body-hit-loc"]);
+  const allowedTemplates = new Set(["coc-dice", "coc-body-hit"]);
   if (!allowedTemplates.has(String(template || "").toLowerCase())) return null;
 
   const safeHtml = String(html || "");
@@ -60,10 +60,7 @@ function parseCocRowsPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: String(template || "")
-      .toLowerCase()
-      .replace(/^coc-dice-roll$/, "coc-dice")
-      .replace(/^coc-body-hit-loc$/, "coc-body-hit"),
+    template: String(template || "").toLowerCase(),
     inputs: { title, rows },
   };
 }
@@ -117,7 +114,7 @@ function parseCocBomadnessPayload(html, template) {
     findIntegerFromTextByKeyword,
   } = parserUtils;
   const normalizedTemplate = String(template || "").toLowerCase();
-  const allowedTemplates = new Set(["coc-bomadness-rt", "coc-bomadness-summ"]);
+  const allowedTemplates = new Set(["coc-madness-realtime", "coc-madness-summary"]);
   if (!allowedTemplates.has(normalizedTemplate)) return null;
 
   const safeHtml = String(html || "");
@@ -133,7 +130,7 @@ function parseCocBomadnessPayload(html, template) {
   const duration = findIntegerFromTextByKeyword(cells, "duration");
   if (Number.isFinite(duration)) label.duration = duration;
 
-  if (normalizedTemplate === "coc-bomadness-rt") {
+  if (normalizedTemplate === "coc-madness-realtime") {
     const number = findIntegerFromTextByKeyword(cells, "mania number");
     const rounds = findIntegerFromTextByKeyword(cells, "rounds");
     if (Number.isFinite(number)) label.number = number;
@@ -143,10 +140,7 @@ function parseCocBomadnessPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template:
-      normalizedTemplate === "coc-bomadness-rt"
-        ? "coc-madness-realtime"
-        : "coc-madness-summary",
+    template: normalizedTemplate,
     inputs: { title, rows: [{ label }] },
   };
 }
@@ -162,7 +156,7 @@ function mapAttackSkill(caption) {
 function parseCocAttackPayload(html, template) {
   const { extractCaptionText, collectTemplateRowsWithCells, extractFirstInteger, extractAllIntegers } =
     parserUtils;
-  if (String(template || "").toLowerCase() !== "coc-attack") return null;
+  if (String(template || "").toLowerCase() !== "coc-attack-bonus-penalty") return null;
   const safeHtml = String(html || "");
   const caption = extractCaptionText(safeHtml);
   const rows = collectTemplateRowsWithCells(safeHtml);
@@ -188,7 +182,7 @@ function parseCocAttackPayload(html, template) {
 
 function parseCocAttackOnePayload(html, template) {
   const { extractCaptionText, collectTemplateRowsWithCells, extractFirstInteger } = parserUtils;
-  if (String(template || "").toLowerCase() !== "coc-attack-1") return null;
+  if (String(template || "").toLowerCase() !== "coc-attack") return null;
   const safeHtml = String(html || "");
   const skill = extractCaptionText(safeHtml);
   const rows = collectTemplateRowsWithCells(safeHtml);
@@ -209,7 +203,7 @@ function parseCocAttackOnePayload(html, template) {
 
 function parseCocPayload(html, template) {
   const { extractCaptionText, collectTemplateRowsWithCells, extractAllIntegers } = parserUtils;
-  if (String(template || "").toLowerCase() !== "coc") return null;
+  if (String(template || "").toLowerCase() !== "coc-bonus-penalty") return null;
   const safeHtml = String(html || "");
   const skill = extractCaptionText(safeHtml);
   const rows = collectTemplateRowsWithCells(safeHtml);
@@ -250,16 +244,16 @@ function parseCocBonusPayload(html, template) {
 }
 
 function parseCocRulePayload({ html, template }) {
-  if (template === "coc-1" || template === "coc-default") {
+  if (template === "coc" || template === "coc-default") {
     return parseCoc1DicePayload(html, template);
   }
   if (template === "coc-bonus") return parseCocBonusPayload(html, template);
-  if (template === "coc") return parseCocPayload(html, template);
-  if (template === "coc-attack") return parseCocAttackPayload(html, template);
-  if (template === "coc-attack-1") return parseCocAttackOnePayload(html, template);
+  if (template === "coc-bonus-penalty") return parseCocPayload(html, template);
+  if (template === "coc-attack-bonus-penalty") return parseCocAttackPayload(html, template);
+  if (template === "coc-attack") return parseCocAttackOnePayload(html, template);
   if (template === "coc-init-stc") return parseCocInitStcPayload(html, template);
   if (template === "coc-defence-2") return parseCocDefence2Payload(html, template);
-  if (template === "coc-bomadness-rt" || template === "coc-bomadness-summ") {
+  if (template === "coc-madness-realtime" || template === "coc-madness-summary") {
     return parseCocBomadnessPayload(html, template);
   }
   return parseCocRowsPayload(html, template);
