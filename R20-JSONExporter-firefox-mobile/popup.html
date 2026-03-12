@@ -19,6 +19,17 @@
         padding: 8px;
       }
 
+      .header h1 {
+        margin: 0 0 4px;
+        font-size: 18px;
+      }
+
+      .header p {
+        margin: 0;
+        font-size: 12px;
+        color: #5c5c5c;
+      }
+
       #statusPanel {
         position: sticky;
         top: 0;
@@ -63,6 +74,10 @@
   </head>
   <body>
     <main>
+      <header class="header">
+        <h1>Exporter Setting</h1>
+        <p>현재 한국어만 지원합니다, Roll20 채팅로그(Show on One Page)화면 에서 사용하세요.</p>
+      </header>
       <section id="statusPanel">
         <section id="exportProgressWrap" hidden>
           <p id="exportProgressLabel">0%</p>

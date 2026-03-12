@@ -6,6 +6,11 @@ const path = require("node:path");
 const popupHtml = fs.readFileSync(path.join(__dirname, "..", "popup.html"), "utf8");
 
 test("firefox mobile popup exposes image-check and deeplink-localhost actions", () => {
+  assert.match(popupHtml, /<h1>Exporter Setting<\/h1>/);
+  assert.match(
+    popupHtml,
+    /현재 한국어만 지원합니다, Roll20 채팅로그\(Show on One Page\)화면 에서 사용하세요\./
+  );
   assert.match(popupHtml, /다운로드전 이미지 링크 확인/);
   assert.match(popupHtml, /ReadingLog 앱으로 데이터 보내기/);
   assert.match(popupHtml, /작은 JSON은 공유 목록에서 ReadingLog 앱으로 바로 보낼 수 있습니다/);

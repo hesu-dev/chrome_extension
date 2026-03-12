@@ -836,6 +836,10 @@
         ? buildChatJsonEntry
         : ({ id, imageUrl, speaker, role, text, timestamp, textColor, speakerImageUrl, dice }) => {
             const normalizedColor = String(textColor || "").trim();
+            const normalizedHexColor = normalizedColor
+              .replace(/;+\s*$/g, "")
+              .replace(/^color\s*:\s*/i, "")
+              .trim();
             const url = String(speakerImageUrl || "").trim();
             const input = {};
             if (imageUrl) input.imageUrl = imageUrl;
@@ -852,9 +856,7 @@
               speaker: String(speaker || ""),
               role: String(role || "character"),
               timestamp: String(timestamp || ""),
-              textColor: normalizedColor
-                ? `color: ${normalizedColor.replace(/^color\s*:\s*/i, "")}`
-                : "",
+              textColor: normalizedHexColor || "",
               text: String(text || ""),
               safetext: String(text || "")
                 .replace(/[^\p{L}\p{N}\s!?.,~]/gu, "")

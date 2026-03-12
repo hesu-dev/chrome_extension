@@ -7,6 +7,11 @@ const popupHtml = fs.readFileSync(path.join(__dirname, "..", "popup.html"), "utf
 const manifest = require("../manifest.json");
 
 test("popup exposes the renamed image-link check and shared ReadingLog download buttons", () => {
+  assert.match(popupHtml, /<h1>Exporter Setting<\/h1>/);
+  assert.match(
+    popupHtml,
+    /현재 한국어만 지원합니다, Roll20 채팅로그\(Show on One Page\)화면 에서 사용하세요\./
+  );
   assert.match(popupHtml, /다운로드전 이미지 링크 확인/);
   assert.match(popupHtml, /ReadingLog 파일 다운로드/);
   assert.doesNotMatch(popupHtml, /프로필 이미지 교체/);

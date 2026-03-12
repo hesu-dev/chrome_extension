@@ -139,10 +139,23 @@ function formatTextColor(rawColor) {
   if (!value) return "";
   const normalized = value.replace(/;+\s*$/g, "").trim();
   if (!normalized) return "";
-  if (/^color\s*:/i.test(normalized)) {
-    return normalized.replace(/\s*:\s*/i, ": ").trim();
+
+  const colorValue = normalized.replace(/^color\s*:\s*/i, "").trim();
+  if (!colorValue) return "";
+
+  const hexMatch = colorValue.match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+  if (hexMatch?.[1]) {
+    const hex = String(hexMatch[1]).toLowerCase();
+    if (hex.length === 3) {
+      return `#${hex
+        .split("")
+        .map((char) => `${char}${char}`)
+        .join("")}`;
+    }
+    return `#${hex}`;
   }
-  return `color: ${normalized}`;
+
+  return colorValue;
 }
 
 function buildSpeakerImages(speakerImageUrl) {

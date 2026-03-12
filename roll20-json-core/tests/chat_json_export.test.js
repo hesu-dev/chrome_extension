@@ -25,5 +25,5 @@ test("buildChatJsonEntry normalizes text and color", () => {
   assert.equal(entry.speaker, "홍길동");
   assert.equal(entry.text, " 안녕   하세요 ");
   assert.equal(entry.safetext, "안녕 하세요");
-  assert.equal(entry.textColor, "color: #ffffff");
+  assert.equal(entry.textColor, "#ffffff");
 });

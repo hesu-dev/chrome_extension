@@ -209,7 +209,7 @@ test("buildSafariExportPayload serializes the current DOM into schema v1 json", 
   assert.equal(parsed.lines[0].speaker, "KP");
   assert.equal(parsed.lines[0].role, "character");
   assert.equal(parsed.lines[0].timestamp, "오후 8:15");
-  assert.equal(parsed.lines[0].textColor, "color: #ff00aa");
+  assert.equal(parsed.lines[0].textColor, "#ff00aa");
   assert.equal(parsed.lines[0].text.trim(), "테스트 메시지");
   assert.equal(
     parsed.lines[0].input.speakerImages.avatar.url,
