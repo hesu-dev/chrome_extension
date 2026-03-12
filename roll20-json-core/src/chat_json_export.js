@@ -168,6 +168,23 @@ function buildSpeakerImages(speakerImageUrl) {
   };
 }
 
+function canonicalizeDiceTemplateName(template) {
+  const value = String(template || "").trim();
+  if (!value) return "";
+  if (value.toLowerCase() === "coc-init-stc") return "coc-dice";
+  return value;
+}
+
+function canonicalizeDicePayload(dice) {
+  if (!dice || typeof dice !== "object") return dice;
+  const template = canonicalizeDiceTemplateName(dice.template);
+  if (!template || template === dice.template) return dice;
+  return {
+    ...dice,
+    template,
+  };
+}
+
 function omitNullishDeep(value) {
   if (value == null) return undefined;
 
@@ -262,7 +279,7 @@ function buildChatJsonEntry({
   const speakerImages = buildSpeakerImages(speakerImageUrl);
   if (speakerImages) rawInput.speakerImages = speakerImages;
   if (dice && typeof dice === "object") {
-    rawInput.dice = removeLegacyVersionFieldDeep(dice);
+    rawInput.dice = removeLegacyVersionFieldDeep(canonicalizeDicePayload(dice));
   }
   const input = omitNullishDeep(rawInput) || {};
   const entry = {

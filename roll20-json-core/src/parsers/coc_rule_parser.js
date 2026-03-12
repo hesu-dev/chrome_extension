@@ -88,7 +88,7 @@ function parseCocInitStcPayload(html, template) {
   return {
     source: "roll20",
     rule: "coc7",
-    template: "coc-init-stc",
+    template: "coc-dice",
     inputs: { title, rows: [{ label }] },
   };
 }

@@ -226,6 +226,31 @@ test('legacy coc madness templates are accepted and exported with renamed output
   );
 });
 
+test('legacy coc-init-stc input is accepted and exported as coc-dice', () => {
+  const html = `
+    <div class="sheet-rolltemplate-coc-init-stc">
+      <table>
+        <caption>Initiative</caption>
+        <tr>
+          <td class="sheet-template_label">굴림</td>
+          <td class="sheet-template_value">DEX 75</td>
+        </tr>
+      </table>
+    </div>
+  `;
+
+  const parsed = parseCocRulePayload({ html, template: 'coc-init-stc' });
+  assert.deepEqual(parsed, {
+    source: 'roll20',
+    rule: 'coc7',
+    template: 'coc-dice',
+    inputs: {
+      title: 'Initiative',
+      rows: [{ label: '굴림: DEX 75' }],
+    },
+  });
+});
+
 test('fallback coc-like text uses inputs.target', () => {
   const html = '듣기 기준치: 55 굴림: 67 판정결과: 실패';
 
