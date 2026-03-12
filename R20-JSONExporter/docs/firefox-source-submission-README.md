@@ -4,14 +4,15 @@ This source package is provided for Mozilla AMO review of the self-distributed A
 
 ## Exact Source Inputs
 
-The uploaded add-on package is built from these sibling folders in the same repository root:
+The zip root contains the Android-targeted Firefox add-on source from `R20-JSONExporter-firefox-mobile`.
+That keeps `manifest.json` at the top level for AMO validation.
+
+Additional sibling sources used to build the submitted package are included under `supporting-sources/`:
 
 - `R20-JSONExporter`
-- `R20-JSONExporter-firefox-mobile`
 - `roll20-json-core`
 
 `R20-JSONExporter` contains the release build scripts.
-`R20-JSONExporter-firefox-mobile` contains the Android-targeted extension source.
 `roll20-json-core` contains the shared parsing source that is bundled into the staged release output as `js/vendor/roll20-json-core.js`.
 
 ## Operating System and Build Environment
@@ -44,19 +45,20 @@ zip -v
 
 ## Step-by-Step Build Instructions
 
-1. Extract this source package so these folders remain siblings under one repository root:
-   - `R20-JSONExporter`
-   - `R20-JSONExporter-firefox-mobile`
-   - `roll20-json-core`
-2. Open a shell in `R20-JSONExporter`.
-3. Run:
+1. Extract this source package.
+2. Treat the extracted zip root as the `R20-JSONExporter-firefox-mobile` folder.
+3. Copy or move these bundled support folders so they become siblings of that Firefox source folder:
+   - `supporting-sources/R20-JSONExporter`
+   - `supporting-sources/roll20-json-core`
+4. Open a shell in `R20-JSONExporter`.
+5. Run:
 
 ```bash
 npm run build
 npm run zip
 ```
 
-4. The Firefox add-on package submitted to AMO is produced at:
+6. The Firefox add-on package submitted to AMO is produced at:
 
 ```bash
 R20-JSONExporter/release/firefox-mobile.zip

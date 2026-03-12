@@ -27,13 +27,13 @@ npm run source:zip
 This command:
 
 1. Stages a clean source submission bundle under `release/firefox-source-submission`
-2. Adds the AMO reviewer `README.md`
-3. Copies only the required source folders:
+2. Places the Firefox mobile add-on source at the zip root so `manifest.json` is top-level for AMO validation
+3. Adds the AMO reviewer guide as `AMO-README.md`
+4. Copies the additional required source folders under `supporting-sources/`:
    - `R20-JSONExporter`
-   - `R20-JSONExporter-firefox-mobile`
    - `roll20-json-core`
-4. Excludes generated `release/` folders, `node_modules`, `.git`, `.DS_Store`, and existing `.zip` files
-5. Creates `release/firefox-mobile-source.zip`
+5. Excludes generated `release/` folders, `node_modules`, `.git`, `.DS_Store`, and existing `.zip` files
+6. Creates `release/firefox-mobile-source.zip`
 
 ## Upload Mapping
 

@@ -5,6 +5,9 @@ const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 const REPO_ROOT = path.resolve(PROJECT_ROOT, "..");
 const SOURCE_SUBMISSION_STAGE_ROOT = path.join(PROJECT_ROOT, "release", "firefox-source-submission");
 const SOURCE_SUBMISSION_ZIP_PATH = path.join(PROJECT_ROOT, "release", "firefox-mobile-source.zip");
+const SOURCE_SUBMISSION_PRIMARY_ITEM = "R20-JSONExporter-firefox-mobile";
+const SOURCE_SUBMISSION_SUPPORTING_DIR = "supporting-sources";
+const SOURCE_SUBMISSION_REVIEW_README_NAME = "AMO-README.md";
 const SOURCE_SUBMISSION_README_TEMPLATE_PATH = path.join(
   PROJECT_ROOT,
   "docs",
@@ -55,7 +58,7 @@ function stageSourceSubmissionBundle() {
 
   fs.copyFileSync(
     SOURCE_SUBMISSION_README_TEMPLATE_PATH,
-    path.join(SOURCE_SUBMISSION_STAGE_ROOT, "README.md")
+    path.join(SOURCE_SUBMISSION_STAGE_ROOT, SOURCE_SUBMISSION_REVIEW_README_NAME)
   );
 
   for (const item of SOURCE_SUBMISSION_ITEMS) {
@@ -63,7 +66,21 @@ function stageSourceSubmissionBundle() {
     if (!fs.existsSync(sourcePath)) {
       throw new Error(`Source submission input is missing: ${sourcePath}`);
     }
-    copyRecursiveFiltered(sourcePath, path.join(SOURCE_SUBMISSION_STAGE_ROOT, item));
+
+    if (item === SOURCE_SUBMISSION_PRIMARY_ITEM) {
+      for (const entry of fs.readdirSync(sourcePath)) {
+        copyRecursiveFiltered(
+          path.join(sourcePath, entry),
+          path.join(SOURCE_SUBMISSION_STAGE_ROOT, entry)
+        );
+      }
+      continue;
+    }
+
+    copyRecursiveFiltered(
+      sourcePath,
+      path.join(SOURCE_SUBMISSION_STAGE_ROOT, SOURCE_SUBMISSION_SUPPORTING_DIR, item)
+    );
   }
 
   return {
@@ -75,6 +92,9 @@ function stageSourceSubmissionBundle() {
 module.exports = {
   SOURCE_SUBMISSION_STAGE_ROOT,
   SOURCE_SUBMISSION_ZIP_PATH,
+  SOURCE_SUBMISSION_PRIMARY_ITEM,
+  SOURCE_SUBMISSION_SUPPORTING_DIR,
+  SOURCE_SUBMISSION_REVIEW_README_NAME,
   SOURCE_SUBMISSION_README_TEMPLATE_PATH,
   SOURCE_SUBMISSION_ITEMS,
   shouldSkipSourceEntry,
