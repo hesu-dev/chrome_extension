@@ -39,8 +39,6 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             let snapshot = try inboxPaths.pendingSnapshot()
             let budgetSnapshot = try storageBudget.preflight(
                 payloadBytes: payloadBytes,
-                pendingBytes: snapshot.totalBytes,
-                pendingFiles: snapshot.fileCount,
                 containerURL: containerURL
             )
             return [

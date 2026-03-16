@@ -1,5 +1,5 @@
 {
-  "appGroupId": "group.com.reha.r20safariexport",
+  "appGroupId": "group.com.reha.readinglog.sync",
   "inboxRelativePath": "roll20/inbox",
   "pendingRelativePath": "roll20/pending",
   "fileExtension": ".json",
@@ -8,8 +8,5 @@
     "storagePreflight": "R20_SAFARI_STORAGE_PREFLIGHT",
     "writeInboxExport": "R20_SAFARI_WRITE_INBOX_EXPORT"
   },
-  "maxSingleFileBytes": 8388608,
-  "maxPendingBytes": 67108864,
-  "maxPendingFiles": 20,
   "minFreeBytesForWrite": 268435456
 }

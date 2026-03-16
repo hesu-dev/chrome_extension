@@ -110,7 +110,9 @@
     }
     if (bindings.statusPayload) {
       bindings.statusPayload.textContent =
-        state?.payloadBytes > 0 ? formatByteSize(state.payloadBytes) : "Payload not built yet.";
+        state?.payloadBytes > 0
+          ? `${formatByteSize(state.payloadBytes)} current file size`
+          : "File size not measured yet.";
     }
     if (bindings.statusInbox) {
       if (state?.savedFileName) {

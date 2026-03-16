@@ -39,7 +39,7 @@ test("safari source exposes standalone iOS app shell metadata", () => {
   assert.deepEqual(metadata.ios, {
     bundleIdentifier: "com.reha.r20safariexport",
     extensionBundleIdentifier: "com.reha.r20safariexport.extension",
-    appGroupId: "group.com.reha.r20safariexport",
+    appGroupId: "group.com.reha.readinglog.sync",
     bridgeContractPath: "ios/Shared/safari_bridge_contract.json",
   });
 });
@@ -52,10 +52,10 @@ test("safari source includes Runner and extension shell files that share the sam
   const extensionInfoPlist = fs.readFileSync(extensionInfoPlistPath, "utf8");
   const extensionHandlerSource = fs.readFileSync(extensionHandlerPath, "utf8");
 
-  assert.match(runnerEntitlements, /group\.com\.reha\.r20safariexport/);
-  assert.match(extensionEntitlements, /group\.com\.reha\.r20safariexport/);
+  assert.match(runnerEntitlements, /group\.com\.reha\.readinglog\.sync/);
+  assert.match(extensionEntitlements, /group\.com\.reha\.readinglog\.sync/);
   assert.deepEqual(bridgeContract, {
-    appGroupId: "group.com.reha.r20safariexport",
+    appGroupId: "group.com.reha.readinglog.sync",
     inboxRelativePath: "roll20/inbox",
     pendingRelativePath: "roll20/pending",
     fileExtension: ".json",
@@ -64,9 +64,6 @@ test("safari source includes Runner and extension shell files that share the sam
       storagePreflight: "R20_SAFARI_STORAGE_PREFLIGHT",
       writeInboxExport: "R20_SAFARI_WRITE_INBOX_EXPORT",
     },
-    maxSingleFileBytes: 8388608,
-    maxPendingBytes: 67108864,
-    maxPendingFiles: 20,
     minFreeBytesForWrite: 268435456,
   });
   assert.match(appDelegateSource, /Roll20SafariBridgeContract/);

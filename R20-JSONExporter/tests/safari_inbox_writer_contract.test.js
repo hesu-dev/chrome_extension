@@ -24,14 +24,15 @@ const extensionHandlerSourcePath = path.join(
 test("safari bridge contract defines inbox write message types and storage budgets", () => {
   const contract = JSON.parse(fs.readFileSync(bridgeContractPath, "utf8"));
 
+  assert.equal(contract.appGroupId, "group.com.reha.readinglog.sync");
   assert.deepEqual(contract.messages, {
     storagePreflight: "R20_SAFARI_STORAGE_PREFLIGHT",
     writeInboxExport: "R20_SAFARI_WRITE_INBOX_EXPORT",
   });
-  assert.equal(contract.maxSingleFileBytes, 8 * 1024 * 1024);
-  assert.equal(contract.maxPendingBytes, 64 * 1024 * 1024);
-  assert.equal(contract.maxPendingFiles, 20);
   assert.equal(contract.minFreeBytesForWrite, 256 * 1024 * 1024);
+  assert.equal("maxSingleFileBytes" in contract, false);
+  assert.equal("maxPendingBytes" in contract, false);
+  assert.equal("maxPendingFiles" in contract, false);
 });
 
 test("safari shared swift sources include App Group path resolution, storage preflight, and atomic inbox writes", () => {
@@ -46,7 +47,9 @@ test("safari shared swift sources include App Group path resolution, storage pre
   );
   assert.match(inboxPathsSource, /Roll20SafariBridgeContract\.inboxRelativePath/);
   assert.match(storageBudgetSource, /volumeAvailableCapacityForImportantUsageKey/);
-  assert.match(storageBudgetSource, /maxSingleFileBytes/);
+  assert.doesNotMatch(storageBudgetSource, /maxSingleFileBytes/);
+  assert.doesNotMatch(storageBudgetSource, /maxPendingBytes/);
+  assert.doesNotMatch(storageBudgetSource, /maxPendingFiles/);
   assert.match(inboxWriterSource, /write\(to:\s*tempURL/);
   assert.match(inboxWriterSource, /moveItem\(at:\s*tempURL,\s*to:\s*finalURL\)/);
   assert.match(extensionHandlerSource, /SFExtensionMessageKey/);

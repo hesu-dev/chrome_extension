@@ -6,7 +6,7 @@
   "ios": {
     "bundleIdentifier": "com.reha.r20safariexport",
     "extensionBundleIdentifier": "com.reha.r20safariexport.extension",
-    "appGroupId": "group.com.reha.r20safariexport",
+    "appGroupId": "group.com.reha.readinglog.sync",
     "bridgeContractPath": "ios/Shared/safari_bridge_contract.json"
   }
 }

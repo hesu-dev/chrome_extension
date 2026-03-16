@@ -140,6 +140,7 @@ test("popup controller measures and exports Roll20 JSON through the active tab",
   assert.match(doc.elements.statusMetrics.textContent, /12 messages/);
   assert.match(doc.elements.statusPayload.textContent, /30 B/);
   assert.match(doc.elements.statusInbox.textContent, /1 pending export/);
+  assert.doesNotMatch(doc.elements.statusPayload.textContent, /payload/i);
   assert.equal(doc.elements.exportButton.disabled, false);
   assert.equal(doc.elements.exportButton.textContent, "Export Again");
 });

@@ -28,8 +28,6 @@ final class SafariInboxWriter {
         let snapshotBeforeWrite = try paths.pendingSnapshot()
         _ = try storageBudget.preflight(
             payloadBytes: payloadData.count,
-            pendingBytes: snapshotBeforeWrite.totalBytes,
-            pendingFiles: snapshotBeforeWrite.fileCount,
             containerURL: containerURL
         )
 
