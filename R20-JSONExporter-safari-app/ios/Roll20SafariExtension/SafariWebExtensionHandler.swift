@@ -27,7 +27,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         default:
             return [
                 "ok": false,
-                "errorMessage": "Unsupported Safari native bridge message."
+                "errorMessage": "지원하지 않는 Safari 브리지 요청입니다."
             ]
         }
     }

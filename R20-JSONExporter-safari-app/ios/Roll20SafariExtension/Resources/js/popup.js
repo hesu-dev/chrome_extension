@@ -42,21 +42,21 @@
   function formatStageLabel(stage) {
     switch (String(stage || "")) {
       case "checking_page":
-        return "Checking Page";
+        return "페이지 확인";
       case "measuring_dom":
-        return "Measuring DOM";
+        return "대화 측정";
       case "building_json":
-        return "Building JSON";
+        return "파일 생성";
       case "checking_storage":
-        return "Checking Storage";
+        return "공간 확인";
       case "writing_inbox":
-        return "Writing Inbox";
+        return "앱으로 복사";
       case "done":
-        return "Done";
+        return "완료";
       case "error":
-        return "Error";
+        return "오류";
       default:
-        return "Idle";
+        return "준비됨";
     }
   }
 
@@ -85,9 +85,21 @@
     return Promise.resolve(api?.runtime?.sendNativeMessage?.(payload));
   }
 
+  function defaultWaitForMs(delayMs) {
+    const duration = Math.max(0, Number(delayMs) || 0);
+    return new Promise((resolve) => {
+      setTimeout(resolve, duration);
+    });
+  }
+
   function formatPendingExportCount(count) {
     const numeric = Number(count) || 0;
-    return numeric === 1 ? "1 pending export" : `${numeric} pending exports`;
+    return numeric === 1 ? "대기 파일 1개" : `대기 파일 ${numeric}개`;
+  }
+
+  function shouldShowDebugDetails() {
+    if (typeof globalThis === "undefined") return false;
+    return globalThis.__ROLL20_SAFARI_DEBUG__ === true;
   }
 
   function renderState(state, bindings) {
@@ -100,29 +112,33 @@
     if (bindings.statusFilename) {
       bindings.statusFilename.textContent = state?.filenameBase
         ? `${state.filenameBase}.json`
-        : "Pending";
+        : "대기 중";
     }
     if (bindings.statusMetrics) {
       const metrics = state?.metrics;
       bindings.statusMetrics.textContent = metrics
-        ? `${metrics.messageCount} messages · ${metrics.domNodeEstimate} DOM nodes`
-        : "No Roll20 measurement yet.";
+        ? shouldShowDebugDetails()
+          ? `메시지 ${metrics.messageCount}개 · DOM 노드 ${metrics.domNodeEstimate}개`
+          : `메시지 ${metrics.messageCount}개`
+        : "아직 측정된 채팅 로그가 없습니다.";
     }
     if (bindings.statusPayload) {
       bindings.statusPayload.textContent =
         state?.payloadBytes > 0
-          ? `${formatByteSize(state.payloadBytes)} current file size`
-          : "File size not measured yet.";
+          ? `현재 파일 크기 ${formatByteSize(state.payloadBytes)}`
+          : "현재 파일 크기를 아직 계산하지 않았습니다.";
     }
     if (bindings.statusInbox) {
-      if (state?.savedFileName) {
+      if (!shouldShowDebugDetails()) {
+        bindings.statusInbox.textContent = "";
+      } else if (state?.savedFileName) {
         bindings.statusInbox.textContent = `${state.savedFileName} · ${formatPendingExportCount(
           state.pendingCount
         )}`;
       } else if (state?.pendingCount > 0) {
         bindings.statusInbox.textContent = formatPendingExportCount(state.pendingCount);
       } else {
-        bindings.statusInbox.textContent = "Inbox not written yet.";
+        bindings.statusInbox.textContent = "아직 앱 보관함으로 복사하지 않았습니다.";
       }
     }
   }
@@ -131,6 +147,9 @@
     api = getWebExtensionApi(),
     doc = getDefaultDocument(),
     progressApi = progressModel,
+    pingRetryDelayMs = 250,
+    pingRetryCount = 3,
+    waitForMs = defaultWaitForMs,
   } = {}) {
     const bindings = createDomBindings(doc);
     const createInitialExportProgress =
@@ -138,7 +157,7 @@
         ? progressApi.createInitialExportProgress
         : () => ({
             stage: "idle",
-            message: "Ready to export Roll20 chat.",
+            message: "Roll20 채팅 로그를 가져올 준비가 되었습니다.",
             filenameBase: "",
             metrics: null,
             payloadBytes: 0,
@@ -161,37 +180,62 @@
       renderState(state, bindings);
     }
 
+    async function pingContentScript(tabId) {
+      const totalAttempts = Math.max(1, Number(pingRetryCount) || 1);
+      for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+        try {
+          const response = await sendTabMessage(api, tabId, {
+            type: contentApi.SAFARI_PING_MESSAGE || "R20_SAFARI_EXPORT_PING",
+          });
+          if (response?.ok) return true;
+        } catch (error) {
+          // Retry after a short delay.
+        }
+        if (attempt < totalAttempts - 1) {
+          await waitForMs(pingRetryDelayMs);
+        }
+      }
+      return false;
+    }
+
     async function handleExportClick() {
       if (bindings.button) {
         bindings.button.disabled = true;
-        bindings.button.textContent = "Exporting...";
+        bindings.button.textContent = "복사하는 중...";
       }
 
       try {
         setState({
           stage: "checking_page",
-          message: "Checking the active Safari tab for Roll20.",
+          message: "현재 사파리 탭이 Roll20 페이지인지 확인하고 있습니다.",
         });
 
         const tab = await queryActiveTab(api);
         if (!tab?.id) {
-          throw new Error("Open a Roll20 tab in Safari first.");
+          throw new Error("사파리에서 Roll20 페이지를 먼저 열어주세요.");
+        }
+
+        const pingOk = await pingContentScript(tab.id);
+        if (!pingOk) {
+          throw new Error(
+            "사파리 페이지 연결이 아직 준비되지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
+          );
         }
 
         setState({
           stage: "measuring_dom",
-          message: "Measuring the loaded Roll20 chat DOM.",
+          message: "현재 열려 있는 Roll20 채팅 로그를 확인하고 있습니다.",
         });
         const measurement = await sendTabMessage(api, tab.id, {
           type: contentApi.SAFARI_MEASURE_MESSAGE || "R20_SAFARI_EXPORT_MEASURE",
         });
         if (!measurement?.ok) {
-          throw new Error(String(measurement?.errorMessage || "Roll20 DOM measurement failed."));
+          throw new Error(String(measurement?.errorMessage || "Roll20 페이지 측정에 실패했습니다."));
         }
 
         setState({
           stage: "measuring_dom",
-          message: "Measured current Roll20 chat DOM.",
+          message: "채팅 로그를 확인했습니다.",
           filenameBase: String(measurement.filenameBase || ""),
           metrics: {
             messageCount: Number(measurement.messageCount) || 0,
@@ -201,20 +245,20 @@
 
         setState({
           stage: "building_json",
-          message: "Building portable Roll20 chat JSON.",
+          message: "리딩로그 파일을 만들고 있습니다.",
         });
         const payload = await sendTabMessage(api, tab.id, {
           type: contentApi.SAFARI_EXPORT_JSON_MESSAGE || "R20_SAFARI_EXPORT_JSON",
         });
         if (!payload?.ok) {
-          throw new Error(String(payload?.errorMessage || "Roll20 JSON build failed."));
+          throw new Error(String(payload?.errorMessage || "리딩로그 파일 생성에 실패했습니다."));
         }
 
         const jsonText = String(payload?.jsonText || "");
         const payloadBytes = getByteLength(jsonText);
         setState({
           stage: "checking_storage",
-          message: "Checking App Group storage budget before writing the inbox export.",
+          message: "앱으로 복사하기 전에 저장 공간을 확인하고 있습니다.",
           filenameBase: String(payload?.filenameBase || measurement.filenameBase || "roll20-chat"),
           payloadBytes,
           jsonText,
@@ -228,13 +272,13 @@
         });
         if (!storagePreflight?.ok) {
           throw new Error(
-            String(storagePreflight?.errorMessage || "Safari inbox storage preflight failed.")
+            String(storagePreflight?.errorMessage || "앱 보관함 저장 공간 확인에 실패했습니다.")
           );
         }
 
         setState({
           stage: "writing_inbox",
-          message: "Writing the JSON export into the Safari inbox.",
+          message: "파일을 앱으로 복사하고 있습니다.",
           filenameBase: String(payload?.filenameBase || measurement.filenameBase || "roll20-chat"),
           pendingCount: Number(storagePreflight.pendingCount) || 0,
           pendingBytes: Number(storagePreflight.pendingBytes) || 0,
@@ -251,12 +295,12 @@
           payloadBytes,
         });
         if (!writeResult?.ok) {
-          throw new Error(String(writeResult?.errorMessage || "Safari inbox write failed."));
+          throw new Error(String(writeResult?.errorMessage || "앱 보관함 복사에 실패했습니다."));
         }
 
         setState({
           stage: "done",
-          message: "Saved to the Safari inbox. Open the standalone app to review pending exports.",
+          message: "복사완료! 앱으로 돌아가주세요.",
           filenameBase: String(payload?.filenameBase || measurement.filenameBase || "roll20-chat"),
           payloadBytes,
           jsonText,
@@ -271,14 +315,13 @@
       } catch (error) {
         setState({
           stage: "error",
-          message: error?.message ? String(error.message) : "Safari export failed.",
-          errorMessage: error?.message ? String(error.message) : "Safari export failed.",
+          message: error?.message ? String(error.message) : "사파리 가져오기에 실패했습니다.",
+          errorMessage: error?.message ? String(error.message) : "사파리 가져오기에 실패했습니다.",
         });
       } finally {
         if (bindings.button) {
           bindings.button.disabled = false;
-          bindings.button.textContent =
-            state.stage === "done" ? "Export Again" : "Export Roll20 JSON";
+          bindings.button.textContent = "리딩로그로 복사하기";
         }
       }
     }

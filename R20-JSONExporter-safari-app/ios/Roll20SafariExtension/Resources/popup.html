@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>R20 Safari Export</title>
+    <title>리딩로그 가져오기</title>
     <style>
       :root {
         color-scheme: light;
@@ -21,11 +21,6 @@
         padding: 16px;
       }
 
-      h1 {
-        margin: 0 0 8px;
-        font-size: 20px;
-      }
-
       p {
         margin: 0 0 12px;
         line-height: 1.4;
@@ -36,7 +31,7 @@
         border: 0;
         border-radius: 10px;
         padding: 12px 14px;
-        background: #215732;
+        background: #225a83;
         color: #fffdf8;
         font-size: 14px;
         font-weight: 600;
@@ -69,23 +64,22 @@
   </head>
   <body>
     <main>
-      <h1>R20 Safari Export</h1>
-      <p>Measure the loaded Roll20 chat DOM, build portable JSON, and hand it to the native save bridge next.</p>
-      <button id="exportButton" type="button">Export Roll20 JSON</button>
+      <p>현재 열려 있는 Roll20 채팅 로그를 리딩로그 파일로 복사합니다. 복사가 끝나면 앱으로 돌아가주세요.</p>
+      <button id="exportButton" type="button">리딩로그로 복사하기</button>
       <section aria-live="polite">
         <dl>
-          <dt>Stage</dt>
-          <dd id="statusStage">Idle</dd>
-          <dt>Status</dt>
-          <dd id="statusMessage">Ready to export Roll20 chat.</dd>
-          <dt>Filename</dt>
-          <dd id="statusFilename">Pending</dd>
-          <dt>Metrics</dt>
-          <dd id="statusMetrics">No Roll20 measurement yet.</dd>
-          <dt>File Size</dt>
-          <dd id="statusPayload">File size not measured yet.</dd>
-          <dt>Inbox</dt>
-          <dd id="statusInbox">Inbox not written yet.</dd>
+          <dt>단계</dt>
+          <dd id="statusStage">준비됨</dd>
+          <dt>상태</dt>
+          <dd id="statusMessage">Roll20 채팅 로그를 가져올 준비가 되었습니다.</dd>
+          <dt>파일명</dt>
+          <dd id="statusFilename">대기 중</dd>
+          <dt>메시지 수</dt>
+          <dd id="statusMetrics">아직 측정된 채팅 로그가 없습니다.</dd>
+          <dt>파일 크기</dt>
+          <dd id="statusPayload">현재 파일 크기를 아직 계산하지 않았습니다.</dd>
+          <!-- <dt>보관함</dt>
+          <dd id="statusInbox">아직 앱 보관함으로 복사하지 않았습니다.</dd> -->
         </dl>
       </section>
     </main>

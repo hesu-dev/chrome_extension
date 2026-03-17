@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "R20 Safari Export",
-  "version": "0.9.0",
-  "description": "Standalone Safari export scaffold for Roll20 chat JSON.",
+  "name": "리딩로그: 파일 가져오기",
+  "version": "0.8.1",
+  "description": "Safiri 확장을 통해, Roll20 채팅 로그를 리딩로그로 복사합니다.",
   "action": {
     "default_popup": "popup.html"
   },
@@ -17,6 +17,16 @@
         "js/content.js"
       ],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "js/page_avatar_resolver.js"
+      ],
+      "matches": [
+        "https://app.roll20.net/*"
+      ]
     }
   ],
   "permissions": [

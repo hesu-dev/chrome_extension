@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const safariContentPath = path.join(
   __dirname,
@@ -13,12 +15,27 @@ const safariContentPath = path.join(
   "js",
   "content.js"
 );
+const safariVendorPath = path.join(
+  __dirname,
+  "..",
+  "..",
+  "R20-JSONExporter-safari-app",
+  "ios",
+  "Roll20SafariExtension",
+  "Resources",
+  "js",
+  "vendor",
+  "roll20-json-core.js"
+);
 
 const {
   SAFARI_MEASURE_MESSAGE,
   SAFARI_EXPORT_JSON_MESSAGE,
+  SAFARI_COLLECT_AVATAR_CANDIDATES_MESSAGE,
   measureSafariExport,
   buildSafariExportPayload,
+  collectAvatarCandidatesFromRoot,
+  collectAvatarMappingsFromRoot,
   createRuntimeMessageHandler,
 } = require(safariContentPath);
 
@@ -42,7 +59,14 @@ function matchesSelector(tagName, classNames, selector) {
   return false;
 }
 
-function createChild({ tagName = "span", classNames = [], textContent = "", styleColor = "", imgSrc = "" } = {}) {
+function createChild({
+  tagName = "span",
+  classNames = [],
+  textContent = "",
+  styleColor = "",
+  imgSrc = "",
+  imgCurrentSrc = "",
+} = {}) {
   return {
     textContent,
     classList: createClassList(classNames),
@@ -61,6 +85,8 @@ function createChild({ tagName = "span", classNames = [], textContent = "", styl
     querySelector(selector) {
       if (selector === "img" && imgSrc) {
         return {
+          currentSrc: imgCurrentSrc || imgSrc,
+          src: imgCurrentSrc || imgSrc,
           getAttribute(name) {
             return name === "src" ? imgSrc : "";
           },
@@ -78,12 +104,20 @@ function createMessage({
   text = "",
   html = "",
   avatarSrc = "",
+  avatarCurrentSrc = "",
   textColor = "",
   messageId = "",
 } = {}) {
   const children = [];
   if (avatarSrc) {
-    children.push(createChild({ tagName: "div", classNames: ["avatar"], imgSrc: avatarSrc }));
+    children.push(
+      createChild({
+        tagName: "div",
+        classNames: ["avatar"],
+        imgSrc: avatarSrc,
+        imgCurrentSrc: avatarCurrentSrc,
+      })
+    );
   }
   if (speaker) {
     children.push(createChild({ classNames: ["by"], textContent: speaker }));
@@ -183,7 +217,7 @@ test("measureSafariExport reports current DOM counts and resolved filename", () 
   assert.ok(metrics.domNodeEstimate >= 8);
 });
 
-test("buildSafariExportPayload serializes the current DOM into schema v1 json", () => {
+test("buildSafariExportPayload serializes the current DOM into schema v1 json", async () => {
   const visibleMessage = createMessage({
     classNames: ["message"],
     speaker: " KP: ",
@@ -198,7 +232,7 @@ test("buildSafariExportPayload serializes the current DOM into schema v1 json", 
     messages: [visibleMessage],
   });
 
-  const payload = buildSafariExportPayload({ doc });
+  const payload = await buildSafariExportPayload({ doc });
   const parsed = JSON.parse(payload.jsonText);
 
   assert.equal(payload.filenameBase, "세션A");
@@ -217,6 +251,125 @@ test("buildSafariExportPayload serializes the current DOM into schema v1 json", 
   );
 });
 
+test("buildSafariExportPayload applies shared avatar redirect mappings", async () => {
+  const roll20AvatarUrl = "https://app.roll20.net/users/avatar/123/456";
+  const redirectedAvatarUrl = "https://secure.gravatar.com/avatar/example";
+  const visibleMessage = createMessage({
+    classNames: ["message"],
+    speaker: " KP: ",
+    timestamp: "8:15 PM",
+    text: " 테스트 메시지 ",
+    avatarSrc: roll20AvatarUrl,
+    avatarCurrentSrc: roll20AvatarUrl,
+    messageId: "msg-1",
+  });
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+    messages: [visibleMessage],
+  });
+
+  const payload = await buildSafariExportPayload({
+    doc,
+    avatarMappings: [
+      {
+        name: "KP",
+        originalUrl: roll20AvatarUrl,
+        avatarUrl: redirectedAvatarUrl,
+      },
+    ],
+  });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(
+    parsed.lines[0].input.speakerImages.avatar.url,
+    redirectedAvatarUrl
+  );
+});
+
+test("buildSafariExportPayload resolves shared avatar mappings through the page resolver hook", async () => {
+  const roll20AvatarUrl = "https://app.roll20.net/users/avatar/123/456";
+  const redirectedAvatarUrl = "https://secure.gravatar.com/avatar/example";
+  const visibleMessage = createMessage({
+    classNames: ["message"],
+    speaker: " KP: ",
+    timestamp: "8:15 PM",
+    text: " 테스트 메시지 ",
+    avatarSrc: roll20AvatarUrl,
+    avatarCurrentSrc: roll20AvatarUrl,
+    messageId: "msg-1",
+  });
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+    messages: [visibleMessage],
+  });
+
+  const payload = await buildSafariExportPayload({
+    doc,
+    resolveAvatarMappings: async (avatarCandidates) =>
+      avatarCandidates.map((candidate) => ({
+        ...candidate,
+        avatarUrl: redirectedAvatarUrl,
+      })),
+  });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(
+    parsed.lines[0].input.speakerImages.avatar.url,
+    redirectedAvatarUrl
+  );
+});
+
+test("collectAvatarMappingsFromRoot resolves Roll20 avatar redirects for shared export", async () => {
+  const roll20AvatarUrl = "https://app.roll20.net/users/avatar/123/456";
+  const redirectedAvatarUrl = "https://secure.gravatar.com/avatar/example";
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP:",
+        avatarSrc: roll20AvatarUrl,
+        avatarCurrentSrc: roll20AvatarUrl,
+        messageId: "msg-1",
+      }),
+    ],
+  });
+
+  const avatarMappings = await collectAvatarMappingsFromRoot(doc, {
+    resolveAvatarUrl: async () => redirectedAvatarUrl,
+  });
+
+  assert.deepEqual(avatarMappings, [
+    {
+      id: `KP|||${roll20AvatarUrl}|||${redirectedAvatarUrl}`,
+      name: "KP",
+      avatarUrl: redirectedAvatarUrl,
+      originalUrl: roll20AvatarUrl,
+    },
+  ]);
+});
+
+test("collectAvatarCandidatesFromRoot returns shared-core compatible avatar candidates", () => {
+  const roll20AvatarUrl = "https://app.roll20.net/users/avatar/123/456";
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP:",
+        avatarSrc: roll20AvatarUrl,
+        avatarCurrentSrc: roll20AvatarUrl,
+        messageId: "msg-1",
+      }),
+    ],
+  });
+
+  assert.deepEqual(collectAvatarCandidatesFromRoot(doc), [
+    {
+      id: `KP|||${roll20AvatarUrl}|||${roll20AvatarUrl}`,
+      name: "KP",
+      originalUrl: roll20AvatarUrl,
+      avatarUrl: roll20AvatarUrl,
+    },
+  ]);
+});
+
 test("runtime message handler returns measurement and export payloads", async () => {
   const handler = createRuntimeMessageHandler({
     measureSafariExport() {
@@ -233,9 +386,20 @@ test("runtime message handler returns measurement and export payloads", async ()
         filenameBase: "session-a",
       };
     },
+    collectAvatarCandidatesFromRoot() {
+      return [
+        {
+          id: "KP|||https://app.roll20.net/users/avatar/123/456|||https://app.roll20.net/users/avatar/123/456",
+          name: "KP",
+          originalUrl: "https://app.roll20.net/users/avatar/123/456",
+          avatarUrl: "https://app.roll20.net/users/avatar/123/456",
+        },
+      ];
+    },
   });
 
   const measurement = await handler({ type: SAFARI_MEASURE_MESSAGE });
+  const avatarCandidates = await handler({ type: SAFARI_COLLECT_AVATAR_CANDIDATES_MESSAGE });
   const exportResult = await handler({ type: SAFARI_EXPORT_JSON_MESSAGE });
 
   assert.deepEqual(measurement, {
@@ -245,9 +409,62 @@ test("runtime message handler returns measurement and export payloads", async ()
     filenameBase: "session-a",
     titleCandidate: "session-a",
   });
+  assert.deepEqual(avatarCandidates, {
+    ok: true,
+    avatarCandidates: [
+      {
+        id: "KP|||https://app.roll20.net/users/avatar/123/456|||https://app.roll20.net/users/avatar/123/456",
+        name: "KP",
+        originalUrl: "https://app.roll20.net/users/avatar/123/456",
+        avatarUrl: "https://app.roll20.net/users/avatar/123/456",
+      },
+    ],
+  });
   assert.deepEqual(exportResult, {
     ok: true,
     jsonText: '{"schemaVersion":1}',
     filenameBase: "session-a",
   });
+});
+
+test("browser runtime export uses the shared parser bundle contract", async () => {
+  const context = vm.createContext({
+    window: {},
+    TextEncoder,
+    URL,
+    location: {
+      href: "https://app.roll20.net/editor/",
+    },
+  });
+  const vendorSource = fs.readFileSync(safariVendorPath, "utf8");
+  const contentSource = fs.readFileSync(safariContentPath, "utf8");
+
+  vm.runInContext(vendorSource, context);
+  vm.runInContext(contentSource, context);
+
+  const payload = await context.window.Roll20SafariExportContent.buildSafariExportPayload({
+    doc: createDocument({
+      hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+      messages: [
+        createMessage({
+          speaker: " KP: ",
+          timestamp: "8:15 PM",
+          text: " 테스트   메시지 ",
+          textColor: "#ff00aa",
+          avatarSrc: "https://example.com/avatar.png",
+          messageId: "msg-1",
+        }),
+      ],
+    }),
+  });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(parsed.schemaVersion, 1);
+  assert.equal(parsed.lines[0].speaker, "KP");
+  assert.equal(parsed.lines[0].timestamp, "오후 8:15");
+  assert.equal(parsed.lines[0].safetext, "테스트 메시지");
+  assert.equal(
+    parsed.lines[0].input.speakerImages.avatar.url,
+    "https://example.com/avatar.png"
+  );
 });

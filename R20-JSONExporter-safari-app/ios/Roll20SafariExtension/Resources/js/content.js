@@ -1,13 +1,26 @@
 (function () {
   const SAFARI_PING_MESSAGE = "R20_SAFARI_EXPORT_PING";
   const SAFARI_MEASURE_MESSAGE = "R20_SAFARI_EXPORT_MEASURE";
+  const SAFARI_COLLECT_AVATAR_CANDIDATES_MESSAGE = "R20_SAFARI_COLLECT_AVATAR_CANDIDATES";
   const SAFARI_EXPORT_JSON_MESSAGE = "R20_SAFARI_EXPORT_JSON";
+  const PAGE_AVATAR_RESOLVE_REQUEST_TYPE = "READINGLOG_SAFARI_PAGE_AVATAR_RESOLVE_REQUEST";
+  const PAGE_AVATAR_RESOLVE_RESPONSE_TYPE = "READINGLOG_SAFARI_PAGE_AVATAR_RESOLVE_RESPONSE";
+  const PAGE_AVATAR_RESOLVER_SCRIPT_ID = "readinglog-safari-page-avatar-resolver";
   const SYSTEM_CLASS_NAMES = ["desc", "emote", "em", "emas"];
   const DICE_TEMPLATE_CLASS_PREFIX = "sheet-rolltemplate-";
-  const chatJsonApi =
+  const sharedCoreApi =
     typeof module !== "undefined" && module.exports
-      ? require("../../../../../roll20-json-core/src/chat_json_export.js")
-      : window.Roll20CleanerChatJson || window.Roll20JsonCore?.chatJson || {};
+      ? require("../../../../../roll20-json-core/src/index.js")
+      : typeof window !== "undefined"
+        ? window.Roll20JsonCore || {}
+        : {};
+  const chatJsonApi =
+    sharedCoreApi.chatJson ||
+    (typeof window !== "undefined" ? window.Roll20CleanerChatJson || window.Roll20JsonCore?.chatJson : {}) ||
+    {};
+  const avatarRedirectCache = new Map();
+  let pageAvatarResolverReadyPromise = null;
+  let pageAvatarResolveSequence = 0;
 
   function getDefaultDocument() {
     return typeof document !== "undefined" ? document : null;
@@ -255,6 +268,357 @@
     return Array.from(doc?.querySelectorAll?.("div.message") || []);
   }
 
+  function getExtensionRuntime() {
+    if (typeof browser !== "undefined" && browser?.runtime) return browser.runtime;
+    if (typeof chrome !== "undefined" && chrome?.runtime) return chrome.runtime;
+    return null;
+  }
+
+  function getExtensionRuntimeUrl(path) {
+    const runtime = getExtensionRuntime();
+    if (typeof runtime?.getURL !== "function") return "";
+    return String(runtime.getURL(path) || "");
+  }
+
+  function mapLimit(items, limit, iteratee) {
+    const list = Array.isArray(items) ? items : [];
+    const workerCount = Math.max(1, Math.min(Number(limit) || 1, list.length || 1));
+    let cursor = 0;
+
+    async function runWorker() {
+      while (cursor < list.length) {
+        const currentIndex = cursor;
+        cursor += 1;
+        await iteratee(list[currentIndex], currentIndex);
+      }
+    }
+
+    return Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  }
+
+  function isRoll20AvatarUrl(url) {
+    return /\/users\/avatar\/[^/]+\/\d+/i.test(String(url || ""));
+  }
+
+  function resolveAvatarUrlViaImage(absoluteUrl, timeoutMs = 1500) {
+    return new Promise((resolve) => {
+      if (!absoluteUrl || typeof Image !== "function") {
+        resolve("");
+        return;
+      }
+
+      const image = new Image();
+      let finished = false;
+      const finish = (value) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve(value || "");
+      };
+      const timer = setTimeout(() => finish(""), timeoutMs);
+      image.onload = () => finish(image.currentSrc || image.src || "");
+      image.onerror = () => finish("");
+      image.src = absoluteUrl;
+    });
+  }
+
+  async function resolveAvatarUrl(url, { loadedImageUrlMap } = {}) {
+    const absolute = toAbsoluteUrl(url);
+    if (!absolute) return "";
+
+    const loaded = loadedImageUrlMap?.get?.(absolute);
+    if (loaded && !isRoll20AvatarUrl(loaded)) return loaded;
+    if (!isRoll20AvatarUrl(absolute)) return absolute;
+    if (avatarRedirectCache.has(absolute)) return avatarRedirectCache.get(absolute) || absolute;
+
+    const cacheResolvedUrl = (value) => {
+      const resolved = toAbsoluteUrl(value, absolute);
+      if (resolved && !isRoll20AvatarUrl(resolved)) {
+        avatarRedirectCache.set(absolute, resolved);
+        return resolved;
+      }
+      return "";
+    };
+
+    try {
+      const byImageFirst = cacheResolvedUrl(await resolveAvatarUrlViaImage(absolute, 2500));
+      if (byImageFirst) return byImageFirst;
+
+      if (typeof fetch === "function") {
+        try {
+          const manualResponse = await fetch(absolute, {
+            method: "GET",
+            redirect: "manual",
+            credentials: "include",
+          });
+          const location = manualResponse?.headers?.get?.("location");
+          const manualResolved = cacheResolvedUrl(location ? toAbsoluteUrl(location, absolute) : "");
+          if (manualResolved) return manualResolved;
+        } catch (error) {
+          // Continue to the next strategy.
+        }
+
+        try {
+          const followedResponse = await fetch(absolute, {
+            method: "GET",
+            redirect: "follow",
+            credentials: "include",
+          });
+          const followedResolved = cacheResolvedUrl(followedResponse?.url || "");
+          if (followedResolved) return followedResolved;
+        } catch (error) {
+          // Continue to the next strategy.
+        }
+      }
+
+      const byImageLast = cacheResolvedUrl(await resolveAvatarUrlViaImage(absolute, 4000));
+      if (byImageLast) return byImageLast;
+    } catch (error) {
+      // Fall through to the fallback below.
+    }
+
+    avatarRedirectCache.set(absolute, absolute);
+    return absolute;
+  }
+
+  async function ensurePageAvatarResolverInjected(doc = getDefaultDocument()) {
+    if (pageAvatarResolverReadyPromise) return pageAvatarResolverReadyPromise;
+
+    pageAvatarResolverReadyPromise = new Promise((resolve) => {
+      const root = doc?.head || doc?.documentElement || doc?.body;
+      const scriptUrl = getExtensionRuntimeUrl("js/page_avatar_resolver.js");
+      if (!root || !scriptUrl || !doc?.createElement) {
+        resolve(false);
+        return;
+      }
+
+      const existing = doc.getElementById?.(PAGE_AVATAR_RESOLVER_SCRIPT_ID);
+      if (existing) {
+        resolve(true);
+        return;
+      }
+
+      const script = doc.createElement("script");
+      script.id = PAGE_AVATAR_RESOLVER_SCRIPT_ID;
+      script.src = scriptUrl;
+      script.async = false;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      root.appendChild(script);
+    });
+
+    return pageAvatarResolverReadyPromise;
+  }
+
+  async function resolveAvatarMappingsViaPageBridge(
+    avatarCandidates,
+    { doc = getDefaultDocument(), timeoutMs = 12000 } = {}
+  ) {
+    const candidates = Array.isArray(avatarCandidates) ? avatarCandidates : [];
+    if (!candidates.length || typeof window === "undefined") return [];
+
+    const injected = await ensurePageAvatarResolverInjected(doc);
+    if (!injected) return [];
+
+    return new Promise((resolve) => {
+      const requestId = `readinglog-safari-avatar-resolve-${Date.now()}-${++pageAvatarResolveSequence}`;
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        window.removeEventListener("message", handleMessage);
+        resolve(Array.isArray(value) ? value : []);
+      };
+      const handleMessage = (event) => {
+        if (event.source !== window) return;
+        const payload = event.data;
+        if (payload?.type !== PAGE_AVATAR_RESOLVE_RESPONSE_TYPE) return;
+        if (String(payload?.requestId || "") !== requestId) return;
+        finish(payload?.resolvedAvatars || []);
+      };
+      const timer = setTimeout(() => finish([]), Math.max(0, Number(timeoutMs) || 0));
+
+      window.addEventListener("message", handleMessage);
+      window.postMessage(
+        {
+          source: "readinglog-safari-content",
+          type: PAGE_AVATAR_RESOLVE_REQUEST_TYPE,
+          requestId,
+          avatarCandidates: candidates,
+        },
+        "*"
+      );
+    });
+  }
+
+  async function collectAvatarMappingsFromRoot(root, options = {}) {
+    const settings = options instanceof Map ? { loadedImageUrlMap: options } : options || {};
+    const loadedImageUrlMap =
+      settings.loadedImageUrlMap instanceof Map ? settings.loadedImageUrlMap : undefined;
+    const resolveAvatarUrlOverride =
+      typeof settings.resolveAvatarUrl === "function" ? settings.resolveAvatarUrl : null;
+    const resolveAvatarMappingsOverride =
+      typeof settings.resolveAvatarMappings === "function" ? settings.resolveAvatarMappings : null;
+    const avatarCandidates = collectAvatarCandidatesFromRoot(root);
+    const resolvedByOriginal = new Map();
+
+    if (resolveAvatarMappingsOverride) {
+      const resolvedItems = await resolveAvatarMappingsOverride(avatarCandidates);
+      for (const item of Array.isArray(resolvedItems) ? resolvedItems : []) {
+        const originalUrl = String(item?.originalUrl || "").trim();
+        if (!originalUrl) continue;
+        const avatarUrl = toAbsoluteUrl(item?.avatarUrl || "", originalUrl) || originalUrl;
+        resolvedByOriginal.set(originalUrl, avatarUrl);
+        avatarRedirectCache.set(originalUrl, avatarUrl);
+      }
+    } else {
+      const pageResolvedItems = await resolveAvatarMappingsViaPageBridge(avatarCandidates, {
+        doc: root,
+      });
+      for (const item of Array.isArray(pageResolvedItems) ? pageResolvedItems : []) {
+        const originalUrl = String(item?.originalUrl || "").trim();
+        if (!originalUrl) continue;
+        const avatarUrl = toAbsoluteUrl(item?.avatarUrl || "", originalUrl) || originalUrl;
+        resolvedByOriginal.set(originalUrl, avatarUrl);
+        avatarRedirectCache.set(originalUrl, avatarUrl);
+      }
+    }
+
+    const pendingResolutions = new Set(
+      avatarCandidates
+        .map((candidate) => String(candidate?.originalUrl || "").trim())
+        .filter((url) => isRoll20AvatarUrl(url) && !avatarRedirectCache.has(url))
+    );
+
+    const resolveMappingUrl = async (url) => {
+      if (resolveAvatarUrlOverride) {
+        const resolved = toAbsoluteUrl(
+          await resolveAvatarUrlOverride(url, { loadedImageUrlMap }),
+          url
+        );
+        const finalUrl = resolved || url;
+        avatarRedirectCache.set(url, finalUrl);
+        return finalUrl;
+      }
+      return resolveAvatarUrl(url, { loadedImageUrlMap });
+    };
+
+    await mapLimit(Array.from(pendingResolutions), 6, async (url) => {
+      await resolveMappingUrl(url);
+    });
+
+    return avatarCandidates.map((candidate) => {
+      const name = String(candidate?.name || "");
+      const absolute = String(candidate?.originalUrl || "");
+      const current = String(candidate?.avatarUrl || "");
+      let finalUrl = resolvedByOriginal.get(absolute) || current || absolute;
+      if (!finalUrl || isRoll20AvatarUrl(finalUrl)) {
+        const cached = avatarRedirectCache.get(absolute) || "";
+        if (cached && !isRoll20AvatarUrl(cached)) {
+          finalUrl = cached;
+        } else {
+          const loaded = loadedImageUrlMap?.get?.(absolute) || "";
+          finalUrl = loaded && !isRoll20AvatarUrl(loaded) ? loaded : absolute;
+        }
+      }
+
+      return {
+        id: `${name}|||${absolute}|||${finalUrl}`,
+        name,
+        avatarUrl: finalUrl,
+        originalUrl: absolute,
+      };
+    });
+  }
+
+  function collectAvatarCandidatesFromRoot(root) {
+    const messages = collectMessages(root);
+    const byVariant = new Map();
+    const baseUrl = String(root?.baseURI || "");
+
+    for (const messageEl of messages) {
+      const name = getMessageSpeakerName(messageEl);
+      const avatarImage = getMessageAvatarImage(messageEl);
+      if (!name || !avatarImage?.getAttribute) continue;
+
+      const rawSrc = String(avatarImage.getAttribute("src") || "").trim();
+      if (!rawSrc) continue;
+
+      const originalUrl = toAbsoluteUrl(rawSrc, baseUrl);
+      if (!originalUrl) continue;
+
+      const currentAvatarUrl = toAbsoluteUrl(
+        avatarImage.currentSrc || avatarImage.src || originalUrl,
+        baseUrl
+      ) || originalUrl;
+      const variantKey = `${name}|||${originalUrl}|||${currentAvatarUrl}`;
+      if (!byVariant.has(variantKey)) {
+        byVariant.set(variantKey, {
+          id: variantKey,
+          name,
+          originalUrl,
+          avatarUrl: currentAvatarUrl,
+        });
+      }
+    }
+
+    return Array.from(byVariant.values());
+  }
+
+  function buildJsonExportNormalizedMessages(messages, { doc = getDefaultDocument() } = {}) {
+    const baseUrl = String(doc?.baseURI || "");
+    const safeResolveMessageId =
+      typeof chatJsonApi.resolveMessageId === "function"
+        ? chatJsonApi.resolveMessageId
+        : (message, index) => String(message?.id || index + 1);
+    const safeIsHiddenPlaceholder =
+      typeof chatJsonApi.isHiddenMessagePlaceholderText === "function"
+        ? chatJsonApi.isHiddenMessagePlaceholderText
+        : (raw) => String(raw || "").includes("This message has been hidden");
+
+    return (Array.isArray(messages) ? messages : []).map((messageEl, index) => {
+      const role = resolveRoleForMessage(messageEl);
+      const avatarImage = getMessageAvatarImage(messageEl);
+      const rawCurrentSrc = String(avatarImage?.getAttribute?.("src") || "").trim();
+      const currentSrc = rawCurrentSrc ? toAbsoluteUrl(rawCurrentSrc, baseUrl) : "";
+      const rawResolvedAvatarUrl = String(
+        avatarImage?.currentSrc || avatarImage?.src || rawCurrentSrc || ""
+      ).trim();
+      const resolvedAvatarUrl = rawResolvedAvatarUrl
+        ? toAbsoluteUrl(rawResolvedAvatarUrl, baseUrl)
+        : "";
+      const messageId =
+        messageEl?.getAttribute?.("data-messageid") ||
+        messageEl?.id ||
+        messageEl?.getAttribute?.("id") ||
+        "";
+
+      return {
+        id: safeResolveMessageId({ id: messageId }, index),
+        speaker: getMessageSpeakerName(messageEl),
+        role,
+        timestamp: getMessageTimestamp(messageEl),
+        textColor: getMessageTextColor(messageEl),
+        text: extractMessageText(messageEl),
+        imageUrl: getInlineMessageImageUrl(messageEl, doc),
+        avatarOriginalUrl: currentSrc,
+        avatarResolvedUrl: resolvedAvatarUrl,
+        dice:
+          typeof chatJsonApi.parseRoll20DicePayload === "function"
+            ? chatJsonApi.parseRoll20DicePayload({
+                role,
+                html: messageEl?.innerHTML || "",
+              })
+            : null,
+        hiddenPlaceholder: safeIsHiddenPlaceholder(messageEl?.textContent || ""),
+        displayNone: false,
+        hasDescStyle: hasDescStyle(messageEl),
+        hasEmoteStyle: hasEmoteStyle(messageEl),
+      };
+    });
+  }
+
   function estimateDomNodes(node) {
     const children = Array.from(node?.children || []);
     return 1 + children.reduce((count, child) => count + estimateDomNodes(child), 0);
@@ -270,7 +634,7 @@
     };
   }
 
-  function buildSafariExportPayload({ doc = getDefaultDocument() } = {}) {
+  function buildSafariExportPayloadLegacy({ doc = getDefaultDocument() } = {}) {
     const messages = collectMessages(doc);
     const lines = [];
     let previousMessageContext = {
@@ -374,8 +738,73 @@
     };
   }
 
+  async function buildSafariExportPayload({
+    doc = getDefaultDocument(),
+    avatarMappings,
+    resolveAvatarMappings,
+    replacements = [],
+  } = {}) {
+    const buildSnapshots = sharedCoreApi.messageSnapshotBuilder?.buildMessageSnapshots;
+    const buildExportDocument = sharedCoreApi.exportDocumentBuilder?.buildExportDocument;
+    const createAvatarExportResolutionContext =
+      sharedCoreApi.avatarResolutionContext?.createAvatarExportResolutionContext;
+    const resolveAvatarExportUrl =
+      sharedCoreApi.avatarResolutionContext?.resolveAvatarExportUrl;
+
+    if (
+      typeof buildSnapshots !== "function" ||
+      typeof buildExportDocument !== "function" ||
+      typeof createAvatarExportResolutionContext !== "function" ||
+      typeof resolveAvatarExportUrl !== "function"
+    ) {
+      return buildSafariExportPayloadLegacy({ doc });
+    }
+
+    let effectiveAvatarMappings = Array.isArray(avatarMappings) ? avatarMappings : [];
+    if (!Array.isArray(avatarMappings)) {
+      try {
+        effectiveAvatarMappings = await collectAvatarMappingsFromRoot(doc, {
+          resolveAvatarMappings,
+        });
+      } catch (error) {
+        console.warn("[ReadingLog Safari] Failed to resolve avatar mappings:", error);
+        effectiveAvatarMappings = [];
+      }
+    }
+
+    const absoluteForDoc = (value, baseUrl = String(doc?.baseURI || "")) =>
+      toAbsoluteUrl(value, baseUrl);
+    const avatarResolutionContext = createAvatarExportResolutionContext(
+      {
+        avatarMappings: effectiveAvatarMappings,
+        replacements,
+      },
+      {
+        toAbsoluteUrl: absoluteForDoc,
+        normalizeSpeakerName,
+      }
+    );
+    const snapshotResult = buildSnapshots({
+      messages: buildJsonExportNormalizedMessages(collectMessages(doc), { doc }),
+      avatarResolutionContext,
+      resolveAvatarUrl: resolveAvatarExportUrl,
+      toAbsoluteUrl: absoluteForDoc,
+    });
+    const exportResult = buildExportDocument({
+      scenarioTitle: extractCampaignNameFromHref(doc),
+      snapshots: snapshotResult?.snapshots || [],
+      compact: false,
+    });
+
+    return {
+      jsonText: String(exportResult?.jsonText || ""),
+      filenameBase: getDownloadNameBase(doc),
+    };
+  }
+
   function createRuntimeMessageHandler({
     measureSafariExport: measure = measureSafariExport,
+    collectAvatarCandidatesFromRoot: collectAvatarCandidates = collectAvatarCandidatesFromRoot,
     buildSafariExportPayload: buildPayload = buildSafariExportPayload,
   } = {}) {
     return async (message) => {
@@ -398,9 +827,27 @@
         }
       }
 
+      if (message?.type === SAFARI_COLLECT_AVATAR_CANDIDATES_MESSAGE) {
+        try {
+          return {
+            ok: true,
+            avatarCandidates: collectAvatarCandidates(getDefaultDocument()),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            errorMessage:
+              error?.message ? String(error.message) : "프로필 이미지 정보를 확인하지 못했습니다.",
+          };
+        }
+      }
+
       if (message?.type === SAFARI_EXPORT_JSON_MESSAGE) {
         try {
-          const payload = buildPayload();
+          const payload = await buildPayload({
+            doc: getDefaultDocument(),
+            avatarMappings: Array.isArray(message?.avatarMappings) ? message.avatarMappings : undefined,
+          });
           return {
             ok: true,
             jsonText: String(payload?.jsonText || ""),
@@ -433,11 +880,14 @@
   const api = {
     SAFARI_PING_MESSAGE,
     SAFARI_MEASURE_MESSAGE,
+    SAFARI_COLLECT_AVATAR_CANDIDATES_MESSAGE,
     SAFARI_EXPORT_JSON_MESSAGE,
     parseCampaignNameFromHref,
     extractCampaignNameFromHref,
     getDownloadNameBase,
     measureSafariExport,
+    collectAvatarCandidatesFromRoot,
+    collectAvatarMappingsFromRoot,
     buildSafariExportPayload,
     createRuntimeMessageHandler,
   };

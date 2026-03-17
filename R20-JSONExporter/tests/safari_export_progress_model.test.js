@@ -35,7 +35,7 @@ test("safari export progress model exposes ordered stages and immutable updates"
   const initial = createInitialExportProgress();
   const next = updateExportProgress(initial, {
     stage: "measuring_dom",
-    message: "Measuring Roll20 chat DOM.",
+    message: "현재 열려 있는 Roll20 채팅 로그를 확인하고 있습니다.",
     metrics: {
       messageCount: 12,
       domNodeEstimate: 84,
@@ -43,9 +43,9 @@ test("safari export progress model exposes ordered stages and immutable updates"
   });
 
   assert.equal(initial.stage, "idle");
-  assert.equal(initial.message, "Ready to export Roll20 chat.");
+  assert.equal(initial.message, "Roll20 채팅 로그를 가져올 준비가 되었습니다.");
   assert.equal(next.stage, "measuring_dom");
-  assert.equal(next.message, "Measuring Roll20 chat DOM.");
+  assert.equal(next.message, "현재 열려 있는 Roll20 채팅 로그를 확인하고 있습니다.");
   assert.deepEqual(next.metrics, {
     messageCount: 12,
     domNodeEstimate: 84,

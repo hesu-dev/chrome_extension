@@ -7,9 +7,9 @@ enum SafariStorageBudgetError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyPayload:
-            return "The Safari inbox payload is empty."
+            return "복사할 파일 내용이 비어 있습니다."
         case .lowDiskSpace:
-            return "The device does not have enough free space for a safe inbox write."
+            return "기기에 안전하게 복사할 만큼의 여유 공간이 부족합니다."
         }
     }
 }

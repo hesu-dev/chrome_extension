@@ -1,7 +1,14 @@
 import Foundation
 
-enum SafariInboxPathsError: Error {
+enum SafariInboxPathsError: LocalizedError {
     case sharedContainerUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .sharedContainerUnavailable:
+            return "앱 공유 저장소를 찾을 수 없습니다."
+        }
+    }
 }
 
 struct SafariPendingSnapshot {

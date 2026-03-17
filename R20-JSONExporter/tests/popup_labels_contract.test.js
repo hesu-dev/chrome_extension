@@ -23,6 +23,17 @@ test("popup exposes the renamed image-link check and shared ReadingLog download 
   assert.match(popupHtml, /js\/popup\/avatar_preview\.js/);
 });
 
-test("chrome manifest version is bumped to 0.9.0", () => {
-  assert.equal(manifest.version, "0.9.0");
+test("popup keeps the hidden message toggle label and helper text outside the toggle body", () => {
+  assert.match(
+    popupHtml,
+    /<label class="toggle">\s*<input id="hiddenTextEnabled" type="checkbox" \/>\s*<span class="toggle-ui" aria-hidden="true"><\/span>\s*<span class="toggle-text">히든 메세지 감춤<\/span>\s*<\/label>\s*<span class="label">\(히든메세지 설정시, 'This message has been hidden\.' 이라는 메세지들이 감춰집니다\)<\/span>/
+  );
+  assert.doesNotMatch(
+    popupHtml,
+    /<label class="toggle">\s*<input id="hiddenTextEnabled" type="checkbox" \/>\s*<span class="toggle-ui" aria-hidden="true"><\/span>\s*<span class="toggle-text">히든 메세지 감춤<\/span>\s*<small>\('This message has been hidden\.' 이라는 메세지들이 감춰집니다\)<\/small>\s*<\/label>/
+  );
+});
+
+test("chrome manifest version is bumped to 0.8.1", () => {
+  assert.equal(manifest.version, "0.8.1");
 });

@@ -28,7 +28,7 @@ function createTextElement() {
 function createButton() {
   return {
     disabled: false,
-    textContent: "Export Roll20 JSON",
+    textContent: "리딩로그로 복사하기",
     listeners: {},
     addEventListener(type, handler) {
       this.listeners[type] = handler;
@@ -71,6 +71,9 @@ test("popup controller measures and exports Roll20 JSON through the active tab",
       },
       async sendMessage(tabId, payload) {
         calls.push({ tabId, payload });
+        if (payload.type === "R20_SAFARI_EXPORT_PING") {
+          return { ok: true };
+        }
         if (payload.type === "R20_SAFARI_EXPORT_MEASURE") {
           return {
             ok: true,
@@ -128,19 +131,83 @@ test("popup controller measures and exports Roll20 JSON through the active tab",
 
   assert.deepEqual(
     calls.map((entry) => entry.payload.type),
-    ["R20_SAFARI_EXPORT_MEASURE", "R20_SAFARI_EXPORT_JSON"]
+    [
+      "R20_SAFARI_EXPORT_PING",
+      "R20_SAFARI_EXPORT_MEASURE",
+      "R20_SAFARI_EXPORT_JSON",
+    ]
   );
   assert.deepEqual(
     nativeCalls.map((entry) => entry.type),
     ["R20_SAFARI_STORAGE_PREFLIGHT", "R20_SAFARI_WRITE_INBOX_EXPORT"]
   );
-  assert.equal(doc.elements.statusStage.textContent, "Done");
-  assert.match(doc.elements.statusMessage.textContent, /saved to the safari inbox/i);
+  assert.equal(doc.elements.statusStage.textContent, "완료");
+  assert.equal(doc.elements.statusMessage.textContent, "복사완료! 앱으로 돌아가주세요.");
   assert.equal(doc.elements.statusFilename.textContent, "세션A.json");
-  assert.match(doc.elements.statusMetrics.textContent, /12 messages/);
-  assert.match(doc.elements.statusPayload.textContent, /30 B/);
-  assert.match(doc.elements.statusInbox.textContent, /1 pending export/);
-  assert.doesNotMatch(doc.elements.statusPayload.textContent, /payload/i);
+  assert.equal(doc.elements.statusMetrics.textContent, "메시지 12개");
+  assert.equal(doc.elements.statusPayload.textContent, "현재 파일 크기 30 B");
+  assert.equal(doc.elements.statusInbox.textContent, "");
   assert.equal(doc.elements.exportButton.disabled, false);
-  assert.equal(doc.elements.exportButton.textContent, "Export Again");
+  assert.equal(doc.elements.exportButton.textContent, "리딩로그로 복사하기");
+});
+
+test("popup controller reports content script readiness failure when the page does not answer ping", async () => {
+  const api = {
+    tabs: {
+      async query() {
+        return [{ id: 42 }];
+      },
+      async sendMessage() {
+        return undefined;
+      },
+    },
+    runtime: {
+      async sendNativeMessage() {
+        throw new Error("native bridge should not run before content ping succeeds");
+      },
+    },
+  };
+  const doc = createPopupDocument();
+  const controller = createPopupController({
+    api,
+    doc,
+    pingRetryDelayMs: 0,
+  });
+
+  await controller.handleExportClick();
+
+  assert.equal(doc.elements.statusStage.textContent, "오류");
+  assert.equal(
+    doc.elements.statusMessage.textContent,
+    "사파리 페이지 연결이 아직 준비되지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
+  );
+  assert.equal(doc.elements.exportButton.disabled, false);
+  assert.equal(doc.elements.exportButton.textContent, "리딩로그로 복사하기");
+});
+
+test("popup controller reports Korean Safari guidance when no Roll20 tab is active", async () => {
+  const api = {
+    tabs: {
+      async query() {
+        return [];
+      },
+    },
+    runtime: {
+      async sendNativeMessage() {
+        throw new Error("native bridge should not run without an active tab");
+      },
+    },
+  };
+  const doc = createPopupDocument();
+  const controller = createPopupController({
+    api,
+    doc,
+  });
+
+  await controller.handleExportClick();
+
+  assert.equal(doc.elements.statusStage.textContent, "오류");
+  assert.equal(doc.elements.statusMessage.textContent, "사파리에서 Roll20 페이지를 먼저 열어주세요.");
+  assert.equal(doc.elements.exportButton.disabled, false);
+  assert.equal(doc.elements.exportButton.textContent, "리딩로그로 복사하기");
 });

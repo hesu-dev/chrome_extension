@@ -82,3 +82,26 @@ test("release staging excludes macOS metadata files", () => {
   assert.equal(firefoxWebEntries.some((item) => item.endsWith(".DS_Store")), false);
   assert.equal(firefoxEntries.some((item) => item.endsWith(".DS_Store")), false);
 });
+
+test("web release popups keep the hidden message helper text outside the toggle body", () => {
+  const chrome = stageChromeRelease();
+  const firefoxWeb = stageFirefoxWebRelease();
+  const chromePopup = fs.readFileSync(
+    path.join(chrome.releaseRoot, "popup.html"),
+    "utf8"
+  );
+  const firefoxWebPopup = fs.readFileSync(
+    path.join(firefoxWeb.releaseRoot, "popup.html"),
+    "utf8"
+  );
+
+  const expectedPattern =
+    /<label class="toggle">\s*<input id="hiddenTextEnabled" type="checkbox" \/>\s*<span class="toggle-ui" aria-hidden="true"><\/span>\s*<span class="toggle-text">히든 메세지 감춤<\/span>\s*<\/label>\s*<span class="label">\(히든메세지 설정시, 'This message has been hidden\.' 이라는 메세지들이 감춰집니다\)<\/span>/;
+  const legacyPattern =
+    /<label class="toggle">\s*<input id="hiddenTextEnabled" type="checkbox" \/>\s*<span class="toggle-ui" aria-hidden="true"><\/span>\s*<span class="toggle-text">히든 메세지 감춤<\/span>\s*<small>\('This message has been hidden\.' 이라는 메세지들이 감춰집니다\)<\/small>\s*<\/label>/;
+
+  assert.match(chromePopup, expectedPattern);
+  assert.match(firefoxWebPopup, expectedPattern);
+  assert.doesNotMatch(chromePopup, legacyPattern);
+  assert.doesNotMatch(firefoxWebPopup, legacyPattern);
+});

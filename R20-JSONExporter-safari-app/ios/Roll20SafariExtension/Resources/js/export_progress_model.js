@@ -13,7 +13,7 @@
   function createInitialExportProgress() {
     return {
       stage: "idle",
-      message: "Ready to export Roll20 chat.",
+      message: "Roll20 채팅 로그를 가져올 준비가 되었습니다.",
       filenameBase: "",
       metrics: null,
       payloadBytes: 0,
