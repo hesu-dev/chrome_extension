@@ -22,6 +22,13 @@
   let pageAvatarResolverReadyPromise = null;
   let pageAvatarResolveSequence = 0;
 
+  function logAvatarTrace(level, payload) {
+    const logger = console?.[level] || console?.log;
+    if (typeof logger === "function") {
+      logger("[AvatarResolver]", payload);
+    }
+  }
+
   function getDefaultDocument() {
     return typeof document !== "undefined" ? document : null;
   }
@@ -274,10 +281,66 @@
     return null;
   }
 
+  function sendRuntimeMessage(payload) {
+    const runtime = getExtensionRuntime();
+    if (typeof runtime?.sendMessage !== "function") {
+      return Promise.resolve(undefined);
+    }
+    try {
+      const result = runtime.sendMessage(payload);
+      if (result && typeof result.then === "function") {
+        return result;
+      }
+      return Promise.resolve(result);
+    } catch (error) {
+      return Promise.resolve(undefined);
+    }
+  }
+
   function getExtensionRuntimeUrl(path) {
     const runtime = getExtensionRuntime();
     if (typeof runtime?.getURL !== "function") return "";
     return String(runtime.getURL(path) || "");
+  }
+
+  async function resolveRedirectViaBackground(url, { traceId = "" } = {}) {
+    const absolute = toAbsoluteUrl(url);
+    if (!absolute || !isRoll20AvatarUrl(absolute)) return "";
+
+    try {
+      logAvatarTrace("info", {
+        traceId,
+        stage: "background_request",
+        url: absolute,
+      });
+      const response = await sendRuntimeMessage({
+        type: "R20_SAFARI_RESOLVE_REDIRECT_URL",
+        url: absolute,
+        traceId,
+      });
+      const finalUrl = toAbsoluteUrl(response?.finalUrl || "", absolute);
+      logAvatarTrace("info", {
+        traceId,
+        stage: "background_response",
+        url: absolute,
+        ok: !!response?.ok,
+        finalUrl,
+        stillRoll20: isRoll20AvatarUrl(finalUrl),
+      });
+      if (response?.ok && finalUrl && !isRoll20AvatarUrl(finalUrl)) {
+        return finalUrl;
+      }
+    } catch (error) {
+      logAvatarTrace("warn", {
+        traceId,
+        stage: "background_error",
+        url: absolute,
+        error: String(error?.message || error),
+      });
+      // Fall through to the content/page strategies below.
+    }
+
+    return "";
   }
 
   function mapLimit(items, limit, iteratee) {
@@ -322,7 +385,7 @@
     });
   }
 
-  async function resolveAvatarUrl(url, { loadedImageUrlMap } = {}) {
+  async function resolveAvatarUrl(url, { loadedImageUrlMap, traceId = "" } = {}) {
     const absolute = toAbsoluteUrl(url);
     if (!absolute) return "";
 
@@ -341,6 +404,11 @@
     };
 
     try {
+      const byBackground = cacheResolvedUrl(
+        await resolveRedirectViaBackground(absolute, { traceId })
+      );
+      if (byBackground) return byBackground;
+
       const byImageFirst = cacheResolvedUrl(await resolveAvatarUrlViaImage(absolute, 2500));
       if (byImageFirst) return byImageFirst;
 
@@ -412,12 +480,17 @@
 
   async function resolveAvatarMappingsViaPageBridge(
     avatarCandidates,
-    { doc = getDefaultDocument(), timeoutMs = 12000 } = {}
+    { doc = getDefaultDocument(), timeoutMs = 12000, traceId = "" } = {}
   ) {
     const candidates = Array.isArray(avatarCandidates) ? avatarCandidates : [];
     if (!candidates.length || typeof window === "undefined") return [];
 
     const injected = await ensurePageAvatarResolverInjected(doc);
+    logAvatarTrace("info", {
+      traceId,
+      stage: "page_injected",
+      injected,
+    });
     if (!injected) return [];
 
     return new Promise((resolve) => {
@@ -445,6 +518,7 @@
           source: "readinglog-safari-content",
           type: PAGE_AVATAR_RESOLVE_REQUEST_TYPE,
           requestId,
+          traceId,
           avatarCandidates: candidates,
         },
         "*"
@@ -470,18 +544,23 @@
         if (!originalUrl) continue;
         const avatarUrl = toAbsoluteUrl(item?.avatarUrl || "", originalUrl) || originalUrl;
         resolvedByOriginal.set(originalUrl, avatarUrl);
-        avatarRedirectCache.set(originalUrl, avatarUrl);
+        if (!isRoll20AvatarUrl(avatarUrl)) {
+          avatarRedirectCache.set(originalUrl, avatarUrl);
+        }
       }
     } else {
       const pageResolvedItems = await resolveAvatarMappingsViaPageBridge(avatarCandidates, {
         doc: root,
+        traceId: String(settings.traceId || ""),
       });
       for (const item of Array.isArray(pageResolvedItems) ? pageResolvedItems : []) {
         const originalUrl = String(item?.originalUrl || "").trim();
         if (!originalUrl) continue;
         const avatarUrl = toAbsoluteUrl(item?.avatarUrl || "", originalUrl) || originalUrl;
         resolvedByOriginal.set(originalUrl, avatarUrl);
-        avatarRedirectCache.set(originalUrl, avatarUrl);
+        if (!isRoll20AvatarUrl(avatarUrl)) {
+          avatarRedirectCache.set(originalUrl, avatarUrl);
+        }
       }
     }
 
@@ -494,21 +573,24 @@
     const resolveMappingUrl = async (url) => {
       if (resolveAvatarUrlOverride) {
         const resolved = toAbsoluteUrl(
-          await resolveAvatarUrlOverride(url, { loadedImageUrlMap }),
+          await resolveAvatarUrlOverride(url, { loadedImageUrlMap, traceId: settings.traceId }),
           url
         );
         const finalUrl = resolved || url;
         avatarRedirectCache.set(url, finalUrl);
         return finalUrl;
       }
-      return resolveAvatarUrl(url, { loadedImageUrlMap });
+      return resolveAvatarUrl(url, {
+        loadedImageUrlMap,
+        traceId: String(settings.traceId || ""),
+      });
     };
 
     await mapLimit(Array.from(pendingResolutions), 6, async (url) => {
       await resolveMappingUrl(url);
     });
 
-    return avatarCandidates.map((candidate) => {
+    const results = avatarCandidates.map((candidate) => {
       const name = String(candidate?.name || "");
       const absolute = String(candidate?.originalUrl || "");
       const current = String(candidate?.avatarUrl || "");
@@ -530,6 +612,17 @@
         originalUrl: absolute,
       };
     });
+
+    logAvatarTrace("info", {
+      traceId: String(settings.traceId || ""),
+      stage: "final_mappings",
+      candidateCount: avatarCandidates.length,
+      resolvedCount: results.filter((item) => !isRoll20AvatarUrl(item.avatarUrl)).length,
+      unresolvedCount: results.filter((item) => isRoll20AvatarUrl(item.avatarUrl)).length,
+      sample: results.slice(0, 3),
+    });
+
+    return results;
   }
 
   function collectAvatarCandidatesFromRoot(root) {
@@ -743,6 +836,7 @@
     avatarMappings,
     resolveAvatarMappings,
     replacements = [],
+    traceId = "",
   } = {}) {
     const buildSnapshots = sharedCoreApi.messageSnapshotBuilder?.buildMessageSnapshots;
     const buildExportDocument = sharedCoreApi.exportDocumentBuilder?.buildExportDocument;
@@ -765,6 +859,7 @@
       try {
         effectiveAvatarMappings = await collectAvatarMappingsFromRoot(doc, {
           resolveAvatarMappings,
+          traceId,
         });
       } catch (error) {
         console.warn("[ReadingLog Safari] Failed to resolve avatar mappings:", error);
@@ -847,6 +942,7 @@
           const payload = await buildPayload({
             doc: getDefaultDocument(),
             avatarMappings: Array.isArray(message?.avatarMappings) ? message.avatarMappings : undefined,
+            traceId: String(message?.traceId || ""),
           });
           return {
             ok: true,

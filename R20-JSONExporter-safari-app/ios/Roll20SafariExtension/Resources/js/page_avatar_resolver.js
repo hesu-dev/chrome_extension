@@ -21,6 +21,13 @@
     return /\/users\/avatar\/[^/]+\/\d+/i.test(String(url || ""));
   }
 
+  function logAvatarPage(level, payload) {
+    const logger = console?.[level] || console?.log;
+    if (typeof logger === "function") {
+      logger("[AvatarPage]", payload);
+    }
+  }
+
   function resolveAvatarUrlViaImage(absoluteUrl, timeoutMs) {
     return new Promise((resolve) => {
       if (!absoluteUrl || typeof Image !== "function") {
@@ -43,7 +50,7 @@
     });
   }
 
-  async function resolveAvatarUrl(originalUrl) {
+  async function resolveAvatarUrl(originalUrl, { traceId = "" } = {}) {
     const absolute = toAbsoluteUrl(originalUrl);
     if (!absolute || !isRoll20AvatarUrl(absolute)) return absolute;
 
@@ -84,10 +91,15 @@
       // Fall through to the original URL.
     }
 
+    logAvatarPage("warn", {
+      traceId,
+      stage: "resolve_fallback_original",
+      originalUrl: absolute,
+    });
     return absolute;
   }
 
-  async function resolveAvatarMappings(avatarCandidates) {
+  async function resolveAvatarMappings(avatarCandidates, { traceId = "" } = {}) {
     const candidates = Array.isArray(avatarCandidates) ? avatarCandidates : [];
     const seen = new Set();
     const resolved = [];
@@ -97,7 +109,14 @@
       if (!originalUrl || seen.has(originalUrl)) continue;
       seen.add(originalUrl);
 
-      const avatarUrl = await resolveAvatarUrl(originalUrl);
+      const avatarUrl = await resolveAvatarUrl(originalUrl, { traceId });
+      logAvatarPage("info", {
+        traceId,
+        stage: "resolve_one",
+        originalUrl,
+        avatarUrl: avatarUrl || originalUrl,
+        stillRoll20: isRoll20AvatarUrl(avatarUrl || originalUrl),
+      });
       resolved.push({
         originalUrl,
         avatarUrl: avatarUrl || originalUrl,
@@ -113,12 +132,19 @@
     if (payload?.source !== "readinglog-safari-content") return;
     if (payload?.type !== REQUEST_TYPE) return;
 
-    const resolvedAvatars = await resolveAvatarMappings(payload.avatarCandidates || []);
+    const traceId = String(payload.traceId || "");
+    logAvatarPage("info", {
+      traceId,
+      stage: "request_received",
+      candidateCount: Array.isArray(payload.avatarCandidates) ? payload.avatarCandidates.length : 0,
+    });
+    const resolvedAvatars = await resolveAvatarMappings(payload.avatarCandidates || [], { traceId });
     window.postMessage(
       {
         source: "readinglog-safari-page",
         type: RESPONSE_TYPE,
         requestId: String(payload.requestId || ""),
+        traceId,
         resolvedAvatars,
       },
       "*"

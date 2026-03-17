@@ -28,9 +28,18 @@ test("safari source manifest declares popup messaging and native save permission
   assert.ok(Array.isArray(manifest.permissions));
   assert.ok(manifest.permissions.includes("tabs"));
   assert.ok(manifest.permissions.includes("nativeMessaging"));
+  assert.deepEqual(manifest.background?.scripts, ["js/background/background.js"]);
+  assert.equal(manifest.background?.persistent, false);
+  assert.equal(manifest.background?.service_worker, undefined);
+  assert.ok(Array.isArray(manifest.host_permissions));
+  assert.ok(manifest.host_permissions.includes("https://*.roll20.net/*"));
+  assert.ok(manifest.host_permissions.includes("https://*.gravatar.com/*"));
   assert.deepEqual(manifest.content_scripts?.[0]?.js?.[0], "js/vendor/roll20-json-core.js");
   assert.ok(
     manifest.web_accessible_resources?.[0]?.resources?.includes?.("js/page_avatar_resolver.js")
+  );
+  assert.ok(
+    fs.existsSync(path.join(safariResourcesRoot, "js", "background", "background.js"))
   );
   assert.ok(
     fs.existsSync(path.join(safariResourcesRoot, "js", "page_avatar_resolver.js"))

@@ -347,6 +347,95 @@ test("collectAvatarMappingsFromRoot resolves Roll20 avatar redirects for shared 
   ]);
 });
 
+test("collectAvatarMappingsFromRoot prefers the Safari background redirect resolver", async () => {
+  const originalBrowser = global.browser;
+  const originalChrome = global.chrome;
+  const originalFetch = global.fetch;
+  const originalImage = global.Image;
+  const roll20AvatarUrl = "https://app.roll20.net/users/avatar/999/888";
+  const redirectedAvatarUrl = "https://secure.gravatar.com/avatar/example-background";
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP:",
+        avatarSrc: roll20AvatarUrl,
+        avatarCurrentSrc: roll20AvatarUrl,
+      }),
+    ],
+  });
+
+  global.browser = {
+    runtime: {
+      async sendMessage(payload) {
+        if (payload?.type === "R20_SAFARI_RESOLVE_REDIRECT_URL") {
+          return { ok: true, finalUrl: redirectedAvatarUrl };
+        }
+        return { ok: false, finalUrl: "" };
+      },
+    },
+  };
+  global.chrome = undefined;
+  global.fetch = async () => {
+    throw new Error("fetch should not run when the background resolver succeeds");
+  };
+  global.Image = class ImmediateImage {
+    set src(value) {
+      this.currentSrc = value;
+      this.onload?.();
+    }
+  };
+
+  try {
+    const avatarMappings = await collectAvatarMappingsFromRoot(doc);
+
+    assert.deepEqual(avatarMappings, [
+      {
+        id: `KP|||${roll20AvatarUrl}|||${redirectedAvatarUrl}`,
+        name: "KP",
+        avatarUrl: redirectedAvatarUrl,
+        originalUrl: roll20AvatarUrl,
+      },
+    ]);
+  } finally {
+    global.browser = originalBrowser;
+    global.chrome = originalChrome;
+    global.fetch = originalFetch;
+    global.Image = originalImage;
+  }
+});
+
+test("collectAvatarMappingsFromRoot retries unresolved page results with the redirect resolver", async () => {
+  const roll20AvatarUrl = "https://app.roll20.net/users/avatar/111/222";
+  const redirectedAvatarUrl = "https://secure.gravatar.com/avatar/example-retried";
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP:",
+        avatarSrc: roll20AvatarUrl,
+        avatarCurrentSrc: roll20AvatarUrl,
+      }),
+    ],
+  });
+
+  const avatarMappings = await collectAvatarMappingsFromRoot(doc, {
+    resolveAvatarMappings: async (avatarCandidates) =>
+      avatarCandidates.map((candidate) => ({
+        originalUrl: candidate.originalUrl,
+        avatarUrl: candidate.originalUrl,
+      })),
+    resolveAvatarUrl: async () => redirectedAvatarUrl,
+  });
+
+  assert.deepEqual(avatarMappings, [
+    {
+      id: `KP|||${roll20AvatarUrl}|||${redirectedAvatarUrl}`,
+      name: "KP",
+      avatarUrl: redirectedAvatarUrl,
+      originalUrl: roll20AvatarUrl,
+    },
+  ]);
+});
+
 test("collectAvatarCandidatesFromRoot returns shared-core compatible avatar candidates", () => {
   const roll20AvatarUrl = "https://app.roll20.net/users/avatar/123/456";
   const doc = createDocument({

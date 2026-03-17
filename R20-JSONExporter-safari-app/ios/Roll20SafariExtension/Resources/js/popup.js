@@ -92,6 +92,34 @@
     });
   }
 
+  async function sendTabMessageWithRetry(
+    api,
+    tabId,
+    payload,
+    {
+      retryDelayMs = 250,
+      retryCount = 3,
+      shouldAcceptResponse = (response) => !!response,
+      waitForMs = defaultWaitForMs,
+    } = {}
+  ) {
+    const totalAttempts = Math.max(1, Number(retryCount) || 1);
+    for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
+      try {
+        const response = await sendTabMessage(api, tabId, payload);
+        if (shouldAcceptResponse(response)) {
+          return response;
+        }
+      } catch (error) {
+        // Retry after a short delay when Safari has not finished wiring the page script.
+      }
+      if (attempt < totalAttempts - 1) {
+        await waitForMs(retryDelayMs);
+      }
+    }
+    return undefined;
+  }
+
   function formatPendingExportCount(count) {
     const numeric = Number(count) || 0;
     return numeric === 1 ? "대기 파일 1개" : `대기 파일 ${numeric}개`;
@@ -181,30 +209,47 @@
     }
 
     async function pingContentScript(tabId) {
-      const totalAttempts = Math.max(1, Number(pingRetryCount) || 1);
-      for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
-        try {
-          const response = await sendTabMessage(api, tabId, {
-            type: contentApi.SAFARI_PING_MESSAGE || "R20_SAFARI_EXPORT_PING",
-          });
-          if (response?.ok) return true;
-        } catch (error) {
-          // Retry after a short delay.
+      const response = await sendTabMessageWithRetry(
+        api,
+        tabId,
+        {
+          type: contentApi.SAFARI_PING_MESSAGE || "R20_SAFARI_EXPORT_PING",
+        },
+        {
+          retryDelayMs: pingRetryDelayMs,
+          retryCount: pingRetryCount,
+          shouldAcceptResponse: (candidate) => candidate?.ok === true,
+          waitForMs,
         }
-        if (attempt < totalAttempts - 1) {
-          await waitForMs(pingRetryDelayMs);
+      );
+      return response?.ok === true;
+    }
+
+    async function measureContentScript(tabId) {
+      return sendTabMessageWithRetry(
+        api,
+        tabId,
+        {
+          type: contentApi.SAFARI_MEASURE_MESSAGE || "R20_SAFARI_EXPORT_MEASURE",
+        },
+        {
+          retryDelayMs: pingRetryDelayMs,
+          retryCount: pingRetryCount,
+          shouldAcceptResponse: (candidate) => candidate?.ok === true || candidate?.ok === false,
+          waitForMs,
         }
-      }
-      return false;
+      );
     }
 
     async function handleExportClick() {
+      const traceId = `safari-${Date.now()}`;
       if (bindings.button) {
         bindings.button.disabled = true;
         bindings.button.textContent = "복사하는 중...";
       }
 
       try {
+        console.info("[SafariExport]", { traceId, stage: "popup_start" });
         setState({
           stage: "checking_page",
           message: "현재 사파리 탭이 Roll20 페이지인지 확인하고 있습니다.",
@@ -215,22 +260,27 @@
           throw new Error("사파리에서 Roll20 페이지를 먼저 열어주세요.");
         }
 
-        const pingOk = await pingContentScript(tab.id);
-        if (!pingOk) {
-          throw new Error(
-            "사파리 페이지 연결이 아직 준비되지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
-          );
-        }
+        await pingContentScript(tab.id);
 
         setState({
           stage: "measuring_dom",
           message: "현재 열려 있는 Roll20 채팅 로그를 확인하고 있습니다.",
         });
-        const measurement = await sendTabMessage(api, tab.id, {
-          type: contentApi.SAFARI_MEASURE_MESSAGE || "R20_SAFARI_EXPORT_MEASURE",
+        const measurement = await measureContentScript(tab.id);
+        console.info("[SafariExport]", {
+          traceId,
+          stage: "measure_done",
+          ok: !!measurement?.ok,
+          messageCount: Number(measurement?.messageCount) || 0,
+          filenameBase: String(measurement?.filenameBase || ""),
         });
         if (!measurement?.ok) {
-          throw new Error(String(measurement?.errorMessage || "Roll20 페이지 측정에 실패했습니다."));
+          throw new Error(
+            String(
+              measurement?.errorMessage ||
+                "사파리 페이지 연결이 아직 준비되지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
+            )
+          );
         }
 
         setState({
@@ -249,6 +299,13 @@
         });
         const payload = await sendTabMessage(api, tab.id, {
           type: contentApi.SAFARI_EXPORT_JSON_MESSAGE || "R20_SAFARI_EXPORT_JSON",
+          traceId,
+        });
+        console.info("[SafariExport]", {
+          traceId,
+          stage: "export_done",
+          ok: !!payload?.ok,
+          filenameBase: String(payload?.filenameBase || ""),
         });
         if (!payload?.ok) {
           throw new Error(String(payload?.errorMessage || "리딩로그 파일 생성에 실패했습니다."));
@@ -312,7 +369,13 @@
               `${payload?.filenameBase || measurement.filenameBase || "roll20-chat"}.json`
           ),
         });
+        console.info("[SafariExport]", { traceId, stage: "popup_done" });
       } catch (error) {
+        console.error("[SafariExport]", {
+          traceId,
+          stage: "popup_error",
+          error: String(error?.message || error),
+        });
         setState({
           stage: "error",
           message: error?.message ? String(error.message) : "사파리 가져오기에 실패했습니다.",

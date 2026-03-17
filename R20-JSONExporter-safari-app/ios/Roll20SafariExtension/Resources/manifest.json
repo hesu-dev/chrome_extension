@@ -6,6 +6,12 @@
   "action": {
     "default_popup": "popup.html"
   },
+  "background": {
+    "scripts": [
+      "js/background/background.js"
+    ],
+    "persistent": false
+  },
   "content_scripts": [
     {
       "matches": [
@@ -32,5 +38,14 @@
   "permissions": [
     "tabs",
     "nativeMessaging"
+  ],
+  "host_permissions": [
+    "https://*.roll20.net/*",
+    "https://roll20.net/*",
+    "https://*.d20.io/*",
+    "https://d20.io/*",
+    "https://*.amazonaws.com/*",
+    "https://*.gravatar.com/*",
+    "https://gravatar.com/*"
   ]
 }
