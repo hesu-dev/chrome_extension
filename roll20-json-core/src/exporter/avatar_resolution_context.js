@@ -2,6 +2,12 @@ function toText(value) {
   return String(value || "").trim();
 }
 
+function toOptionalAbsoluteUrl(value, toAbsoluteUrl) {
+  const raw = toText(value);
+  if (!raw) return "";
+  return toAbsoluteUrl(raw);
+}
+
 function isAllowedImageUrl(url) {
   const value = toText(url);
   return /^(https?:\/\/|data:image\/)/i.test(value);
@@ -30,8 +36,8 @@ function buildReplacementMaps(replacements, deps = {}) {
 
   items.forEach((item) => {
     const name = normalizeSpeakerName(item?.name || "");
-    const originalUrl = toAbsoluteUrl(item?.originalUrl || "");
-    const avatarUrl = toAbsoluteUrl(item?.avatarUrl || "");
+    const originalUrl = toOptionalAbsoluteUrl(item?.originalUrl || "", toAbsoluteUrl);
+    const avatarUrl = toOptionalAbsoluteUrl(item?.avatarUrl || "", toAbsoluteUrl);
     const newUrl = toText(item?.newUrl || "");
     if (!name || !originalUrl || !newUrl || !isAllowedImageUrl(newUrl)) return;
 
@@ -59,8 +65,8 @@ function findReplacementForMessage(message, maps, deps = {}) {
       : (value) => toText(value);
 
   const name = normalizeSpeakerName(message?.name || "");
-  const currentSrc = toAbsoluteUrl(message?.currentSrc || "");
-  const currentAvatarUrl = toAbsoluteUrl(message?.currentAvatarUrl || "");
+  const currentSrc = toOptionalAbsoluteUrl(message?.currentSrc || "", toAbsoluteUrl);
+  const currentAvatarUrl = toOptionalAbsoluteUrl(message?.currentAvatarUrl || "", toAbsoluteUrl);
   if (!name || !currentSrc) return "";
 
   const byVariant = maps?.byVariant instanceof Map ? maps.byVariant : new Map();
@@ -119,7 +125,8 @@ function resolveAvatarExportUrl(
   } = {}
 ) {
   const fallbackUrl =
-    toAbsoluteUrl(message?.currentAvatarUrl || "") || toAbsoluteUrl(message?.currentSrc || "");
+    toOptionalAbsoluteUrl(message?.currentAvatarUrl || "", toAbsoluteUrl) ||
+    toOptionalAbsoluteUrl(message?.currentSrc || "", toAbsoluteUrl);
   if (typeof findReplacement !== "function") return fallbackUrl;
 
   const overrideUrl = findReplacement(

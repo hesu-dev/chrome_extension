@@ -103,3 +103,29 @@ test("manual avatar replacements override redirected avatar mappings", () => {
 
   assert.equal(resolved, customUrl);
 });
+
+test("direct export keeps empty avatar fields empty instead of turning them into the page url", () => {
+  const webLikeToAbsoluteUrl = (value, baseUrl = "https://app.roll20.net/campaigns/chatarchive/21230093") => {
+    try {
+      return new URL(value, baseUrl).href;
+    } catch (error) {
+      return "";
+    }
+  };
+
+  const resolved = resolveAvatarExportUrl(
+    {
+      name: "PL",
+      currentSrc: "",
+      currentAvatarUrl: "",
+    },
+    createAvatarExportResolutionContext(),
+    {
+      findReplacementForMessage: avatarRules.findReplacementForMessage,
+      toAbsoluteUrl: webLikeToAbsoluteUrl,
+      normalizeSpeakerName,
+    }
+  );
+
+  assert.equal(resolved, "");
+});

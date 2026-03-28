@@ -98,3 +98,29 @@ test("avatar resolution falls back to redirected url when no override exists", (
 
   assert.equal(result, redirectedUrl);
 });
+
+test("avatar resolution keeps empty avatar fields empty instead of resolving them to the page url", () => {
+  const webLikeToAbsoluteUrl = (value, baseUrl = "https://app.roll20.net/campaigns/chatarchive/21230093") => {
+    try {
+      return new URL(value, baseUrl).href;
+    } catch (error) {
+      return "";
+    }
+  };
+
+  const result = resolveAvatarExportUrl(
+    {
+      name: "PL",
+      currentSrc: "",
+      currentAvatarUrl: "",
+    },
+    createAvatarExportResolutionContext(),
+    {
+      findReplacement: findReplacementForMessage,
+      toAbsoluteUrl: webLikeToAbsoluteUrl,
+      normalizeSpeakerName: (value) => String(value || "").trim(),
+    }
+  );
+
+  assert.equal(result, "");
+});

@@ -7,6 +7,12 @@
     };
   }
 
+  function toOptionalAbsoluteUrl(value, toAbsoluteUrl) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    return toAbsoluteUrl(raw);
+  }
+
   function createAvatarExportResolutionContext(
     { avatarMappings = [], replacements = [] } = {},
     {
@@ -51,7 +57,8 @@
     } = {}
   ) {
     const fallbackUrl =
-      toAbsoluteUrl(message?.currentAvatarUrl || "") || toAbsoluteUrl(message?.currentSrc || "");
+      toOptionalAbsoluteUrl(message?.currentAvatarUrl || "", toAbsoluteUrl) ||
+      toOptionalAbsoluteUrl(message?.currentSrc || "", toAbsoluteUrl);
     if (typeof findReplacementForMessage !== "function") return fallbackUrl;
 
     const overrideUrl = findReplacementForMessage(

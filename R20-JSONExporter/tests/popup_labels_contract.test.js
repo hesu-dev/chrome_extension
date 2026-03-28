@@ -34,6 +34,6 @@ test("popup keeps the hidden message toggle label and helper text outside the to
   );
 });
 
-test("chrome manifest version is bumped to 0.8.1", () => {
-  assert.equal(manifest.version, "0.8.1");
+test("chrome manifest version is bumped to 0.8.2", () => {
+  assert.equal(manifest.version, "0.8.2");
 });
