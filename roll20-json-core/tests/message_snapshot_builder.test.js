@@ -54,3 +54,55 @@ test("message snapshot builder excludes hidden and display-none messages and pre
   assert.equal(result.snapshots[1].speakerImageUrl, "https://cdn.example.com/avatar-final.png");
   assert.equal(result.snapshots[1].timestamp, "8:15 PM");
 });
+
+test("message snapshot builder inherits avatar context when the current speaker matches the previous speaker", () => {
+  const result = buildMessageSnapshots({
+    messages: [
+      {
+        speaker: "KP:",
+        role: "character",
+        timestamp: "8:15 PM",
+        text: "첫번째",
+        avatarOriginalUrl: "https://app.roll20.net/users/avatar/abc/123",
+        avatarResolvedUrl: "https://cdn.example.com/avatar-final.png",
+      },
+      {
+        speaker: "KP",
+        role: "character",
+        timestamp: "8:16 PM",
+        text: "두번째",
+        avatarOriginalUrl: "",
+        avatarResolvedUrl: "",
+      },
+    ],
+  });
+
+  assert.equal(result.snapshots[1].speaker, "KP");
+  assert.equal(result.snapshots[1].speakerImageUrl, "https://cdn.example.com/avatar-final.png");
+});
+
+test("message snapshot builder clears avatar context when the speaker changes and the current message has no avatar", () => {
+  const result = buildMessageSnapshots({
+    messages: [
+      {
+        speaker: "KP:",
+        role: "character",
+        timestamp: "8:15 PM",
+        text: "첫번째",
+        avatarOriginalUrl: "https://app.roll20.net/users/avatar/abc/123",
+        avatarResolvedUrl: "https://cdn.example.com/avatar-final.png",
+      },
+      {
+        speaker: "PL",
+        role: "character",
+        timestamp: "8:16 PM",
+        text: "두번째",
+        avatarOriginalUrl: "",
+        avatarResolvedUrl: "",
+      },
+    ],
+  });
+
+  assert.equal(result.snapshots[1].speaker, "PL");
+  assert.equal(result.snapshots[1].speakerImageUrl, null);
+});

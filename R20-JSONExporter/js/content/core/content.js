@@ -952,17 +952,27 @@
               },
               fallbackContext
             )
-          : {
-              speaker: rawSpeaker || fallbackContext.speaker || "",
-              avatarSrc: currentSrc || fallbackContext.avatarSrc || "",
-              speakerImageUrl:
+          : (() => {
+              const normalizedRawSpeaker = normalizeSpeakerName(rawSpeaker || "");
+              const fallbackSpeaker = normalizeSpeakerName(fallbackContext.speaker || "");
+              const canInheritAvatarContext =
+                !normalizedRawSpeaker || normalizedRawSpeaker === fallbackSpeaker;
+              const inheritedAvatarSrc =
+                currentSrc ||
+                (canInheritAvatarContext ? fallbackContext.avatarSrc || "" : "");
+              const inheritedSpeakerImageUrl =
                 resolvedAvatarUrl ||
                 currentSrc ||
-                fallbackContext.speakerImageUrl ||
-                fallbackContext.avatarSrc ||
-                "",
-              timestamp: rawTimestamp || fallbackContext.timestamp || "",
-            };
+                (canInheritAvatarContext ? fallbackContext.speakerImageUrl || "" : "") ||
+                inheritedAvatarSrc ||
+                "";
+              return {
+                speaker: normalizedRawSpeaker || fallbackSpeaker || "",
+                avatarSrc: inheritedAvatarSrc,
+                speakerImageUrl: inheritedSpeakerImageUrl,
+                timestamp: rawTimestamp || fallbackContext.timestamp || "",
+              };
+            })();
       const speaker = resolvedContext.speaker;
       const effectiveCurrentSrc = resolvedContext.avatarSrc;
       const effectiveSpeakerImageUrl = resolvedContext.speakerImageUrl || effectiveCurrentSrc;

@@ -10,16 +10,22 @@ function resolveMessageContext(current, previous) {
   const now = current || {};
 
   const normalizedSpeaker = normalizeSpeakerName(now.speaker || "");
+  const previousSpeaker = normalizeSpeakerName(prev.speaker || "");
+  const canInheritAvatarContext =
+    !normalizedSpeaker || normalizedSpeaker === previousSpeaker;
   const currentAvatarSrc = String(now.avatarSrc || "").trim();
   const currentSpeakerImageUrl = String(now.speakerImageUrl || "").trim();
   const currentTimestamp = String(now.timestamp || "").replace(/\s+/g, " ").trim();
-  const inheritedAvatarSrc = currentAvatarSrc || String(prev.avatarSrc || "");
+  const inheritedAvatarSrc =
+    currentAvatarSrc || (canInheritAvatarContext ? String(prev.avatarSrc || "") : "");
   const inheritedSpeakerImageUrl =
-    currentSpeakerImageUrl || String(prev.speakerImageUrl || "") || inheritedAvatarSrc;
+    currentSpeakerImageUrl ||
+    (canInheritAvatarContext ? String(prev.speakerImageUrl || "") : "") ||
+    inheritedAvatarSrc;
   const inheritedTimestamp = currentTimestamp || String(prev.timestamp || "");
 
   return {
-    speaker: normalizedSpeaker || String(prev.speaker || ""),
+    speaker: normalizedSpeaker || previousSpeaker || "",
     avatarSrc: inheritedAvatarSrc,
     speakerImageUrl: inheritedSpeakerImageUrl,
     timestamp: inheritedTimestamp,

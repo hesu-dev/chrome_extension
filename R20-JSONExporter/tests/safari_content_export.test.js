@@ -251,6 +251,66 @@ test("buildSafariExportPayload serializes the current DOM into schema v1 json", 
   );
 });
 
+test("buildSafariExportPayload inherits the previous speaker avatar url when the current message has no avatar", async () => {
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+    messages: [
+      createMessage({
+        classNames: ["message"],
+        speaker: " KP: ",
+        timestamp: "8:15 PM",
+        text: "첫번째 메시지",
+        avatarSrc: "https://example.com/avatar.png",
+        messageId: "msg-1",
+      }),
+      createMessage({
+        classNames: ["message"],
+        speaker: " KP: ",
+        timestamp: "8:16 PM",
+        text: "두번째 메시지",
+        messageId: "msg-2",
+      }),
+    ],
+  });
+
+  const payload = await buildSafariExportPayload({ doc });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(
+    parsed.lines[1].input.speakerImages.avatar.url,
+    "https://example.com/avatar.png"
+  );
+});
+
+test("buildSafariExportPayload clears the avatar url when the speaker changes and the current message has no avatar", async () => {
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+    messages: [
+      createMessage({
+        classNames: ["message"],
+        speaker: " KP: ",
+        timestamp: "8:15 PM",
+        text: "첫번째 메시지",
+        avatarSrc: "https://example.com/avatar.png",
+        messageId: "msg-1",
+      }),
+      createMessage({
+        classNames: ["message"],
+        speaker: " PL: ",
+        timestamp: "8:16 PM",
+        text: "두번째 메시지",
+        messageId: "msg-2",
+      }),
+    ],
+  });
+
+  const payload = await buildSafariExportPayload({ doc });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(parsed.lines[1].speaker, "PL");
+  assert.equal(parsed.lines[1].input.speakerImages, undefined);
+});
+
 test("buildSafariExportPayload applies shared avatar redirect mappings", async () => {
   const roll20AvatarUrl = "https://app.roll20.net/users/avatar/123/456";
   const redirectedAvatarUrl = "https://secure.gravatar.com/avatar/example";

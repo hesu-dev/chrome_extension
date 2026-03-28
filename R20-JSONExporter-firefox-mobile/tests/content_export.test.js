@@ -200,7 +200,7 @@ test("buildFirefoxExportPayload serializes the current DOM into schema v1 json",
   assert.equal(parsed.lines[0].speaker, "KP");
   assert.equal(parsed.lines[0].role, "character");
   assert.equal(parsed.lines[0].timestamp, "오후 8:15");
-  assert.equal(parsed.lines[0].textColor, "color: #ff00aa");
+  assert.equal(parsed.lines[0].textColor, "#ff00aa");
   assert.equal(parsed.lines[0].text.trim(), "테스트 메시지");
   assert.equal(
     parsed.lines[0].input.speakerImages.avatar.url,
@@ -331,6 +331,38 @@ test("buildFirefoxExportPayload direct export keeps per-line redirected avatars 
   );
   assert.equal(parsed.lines[0].input.avatarLinkMeta, undefined);
   assert.equal(parsed.lines[1].input.avatarLinkMeta, undefined);
+});
+
+test("buildFirefoxExportPayload inherits the previous avatar only when the speaker is unchanged", () => {
+  const doc = createDocument({
+    messages: [
+      createMessage({
+        speaker: "KP",
+        timestamp: "8:15 PM",
+        text: "첫번째",
+        avatarSrc: "https://example.com/avatar.png",
+        messageId: "msg-1",
+      }),
+      createMessage({
+        speaker: "KP",
+        timestamp: "8:16 PM",
+        text: "두번째",
+        messageId: "msg-2",
+      }),
+      createMessage({
+        speaker: "PL",
+        timestamp: "8:17 PM",
+        text: "세번째",
+        messageId: "msg-3",
+      }),
+    ],
+  });
+
+  const payload = buildFirefoxExportPayload({ doc });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(parsed.lines[1].input.speakerImages.avatar.url, "https://example.com/avatar.png");
+  assert.equal(parsed.lines[2].input.speakerImages, undefined);
 });
 
 test("buildFirefoxExportPayload uses resolved avatar mappings when the DOM avatar src is still a Roll20 url", () => {
