@@ -36,7 +36,7 @@ function buildExportDocument({ scenarioTitle = "", snapshots = [], compact = tru
     jsonText,
     jsonByteLength,
     lineCount: lines.length,
-    ruleType: String(documentPayload?.ebookView?.titlePage?.ruleType || ""),
+    ruleType: String(documentPayload?.titlePage?.ruleType || ""),
   };
 }
 

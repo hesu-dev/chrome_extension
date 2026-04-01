@@ -249,7 +249,37 @@
     if (typeof chatJsonApi.buildChatJsonEntry === "function") {
       return chatJsonApi.buildChatJsonEntry(payload);
     }
-    return payload;
+    const speakerImageUrl = String(payload?.speakerImageUrl || "").trim();
+    const input = {};
+    if (payload?.imageUrl != null) input.imageUrl = String(payload.imageUrl);
+    input.portrait = speakerImageUrl
+      ? {
+          mode: "pair",
+          images: {
+            avatar: {
+              originUrl: speakerImageUrl,
+            },
+          },
+        }
+      : {
+          mode: "none",
+        };
+    if (payload?.dice && typeof payload.dice === "object") {
+      input.dice = {
+        ...payload.dice,
+        v: Number.isFinite(Number(payload.dice.v)) ? Number(payload.dice.v) : 1,
+      };
+    }
+    return {
+      id: String(payload?.id || ""),
+      speaker: String(payload?.speaker || ""),
+      role: String(payload?.role || "character"),
+      timestamp: String(payload?.timestamp || ""),
+      textColor: String(payload?.textColor || ""),
+      text: String(payload?.text || ""),
+      safetext: normalizeMessageText(payload?.text || ""),
+      input,
+    };
   }
 
   function buildChatJsonDocument(payload) {
@@ -257,18 +287,16 @@
       return chatJsonApi.buildChatJsonDocument(payload);
     }
     return {
-      schemaVersion: 1,
-      ebookView: {
-        titlePage: {
-          scenarioTitle: String(payload?.scenarioTitle || ""),
-          ruleType: "",
-          gm: "",
-          pl: "",
-          writer: "",
-          copyright: "",
-          identifier: "",
-          extraMetaItems: [],
-        },
+      version: 1,
+      titlePage: {
+        scenarioTitle: String(payload?.scenarioTitle || ""),
+        ruleType: "",
+        gm: "",
+        pl: "",
+        writer: "",
+        copyright: "",
+        identifier: "",
+        extraMetaItems: [],
       },
       lines: Array.isArray(payload?.lines) ? payload.lines : [],
     };

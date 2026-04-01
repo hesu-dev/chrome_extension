@@ -167,7 +167,7 @@ function createDocument({ title = "Roll20 Chat", hrefs = [], messages = [] } = {
   };
 }
 
-test("buildFirefoxExportPayload serializes the current DOM into schema v1 json", () => {
+test("buildFirefoxExportPayload serializes the current DOM into ReadingLog external input json", () => {
   const visibleMessage = createMessage({
     classNames: ["message"],
     speaker: " KP: ",
@@ -193,8 +193,8 @@ test("buildFirefoxExportPayload serializes the current DOM into schema v1 json",
   assert.equal(payload.filenameBase, "세션A");
   assert.equal(payload.lineCount, 1);
   assert.ok(payload.jsonByteLength > 0);
-  assert.equal(parsed.schemaVersion, 1);
-  assert.equal(parsed.ebookView.titlePage.scenarioTitle, "세션A");
+  assert.equal(parsed.version, 1);
+  assert.equal(parsed.titlePage.scenarioTitle, "세션A");
   assert.equal(parsed.lines.length, 1);
   assert.equal(parsed.lines[0].id, "msg-1");
   assert.equal(parsed.lines[0].speaker, "KP");
@@ -202,8 +202,9 @@ test("buildFirefoxExportPayload serializes the current DOM into schema v1 json",
   assert.equal(parsed.lines[0].timestamp, "오후 8:15");
   assert.equal(parsed.lines[0].textColor, "#ff00aa");
   assert.equal(parsed.lines[0].text.trim(), "테스트 메시지");
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     "https://example.com/avatar.png"
   );
 });
@@ -321,12 +322,14 @@ test("buildFirefoxExportPayload direct export keeps per-line redirected avatars 
   });
   const parsed = JSON.parse(payload.jsonText);
 
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     "https://cdn.example.com/avatar-a.png"
   );
+  assert.equal(parsed.lines[1].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[1].input.speakerImages.avatar.url,
+    parsed.lines[1].input.portrait.images.avatar.originUrl,
     "https://cdn.example.com/avatar-b.png"
   );
   assert.equal(parsed.lines[0].input.avatarLinkMeta, undefined);
@@ -361,8 +364,34 @@ test("buildFirefoxExportPayload inherits the previous avatar only when the speak
   const payload = buildFirefoxExportPayload({ doc });
   const parsed = JSON.parse(payload.jsonText);
 
-  assert.equal(parsed.lines[1].input.speakerImages.avatar.url, "https://example.com/avatar.png");
-  assert.equal(parsed.lines[2].input.speakerImages, undefined);
+  assert.equal(parsed.lines[1].input.portrait.mode, "pair");
+  assert.equal(
+    parsed.lines[1].input.portrait.images.avatar.originUrl,
+    "https://example.com/avatar.png"
+  );
+  assert.equal(parsed.lines[2].input.portrait.mode, "none");
+  assert.equal(parsed.lines[2].input.portrait.images, undefined);
+});
+
+test("buildFirefoxExportPayload exports desc-styled messages with system role", () => {
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+    messages: [
+      createMessage({
+        classNames: ["message", "desc"],
+        speaker: " SYSTEM: ",
+        timestamp: "8:17 PM",
+        text: "차가운 공기가 스며든다.",
+        messageId: "msg-desc-1",
+      }),
+    ],
+  });
+
+  const payload = buildFirefoxExportPayload({ doc });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(parsed.lines[0].role, "system");
+  assert.equal(parsed.lines[0].input.portrait.mode, "none");
 });
 
 test("buildFirefoxExportPayload uses resolved avatar mappings when the DOM avatar src is still a Roll20 url", () => {
@@ -395,8 +424,9 @@ test("buildFirefoxExportPayload uses resolved avatar mappings when the DOM avata
   });
   const parsed = JSON.parse(payload.jsonText);
 
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     redirectedUrl
   );
 });
@@ -428,8 +458,9 @@ test("buildFirefoxExportPayload mapped export keeps user replacement", () => {
   });
   const parsed = JSON.parse(payload.jsonText);
 
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     "https://images.example.com/custom-avatar.png"
   );
   assert.equal(parsed.lines[0].input.avatarLinkMeta, undefined);
@@ -474,7 +505,7 @@ test("runtime message handler returns export payloads, mappings, and ping respon
   const handler = createRuntimeMessageHandler({
     buildFirefoxExportPayload() {
       return {
-        jsonText: '{"schemaVersion":1}',
+        jsonText: '{"version":1}',
         filenameBase: "session-a",
         jsonByteLength: 19,
         lineCount: 1,
@@ -501,14 +532,14 @@ test("runtime message handler returns export payloads, mappings, and ping respon
   });
   assert.deepEqual(exportResult, {
     ok: true,
-    jsonText: '{"schemaVersion":1}',
+    jsonText: '{"version":1}',
     filenameBase: "session-a",
     jsonByteLength: 19,
     lineCount: 1,
   });
   assert.deepEqual(exportMappedResult, {
     ok: true,
-    jsonText: '{"schemaVersion":1}',
+    jsonText: '{"version":1}',
     filenameBase: "session-a",
     jsonByteLength: 19,
     lineCount: 1,
@@ -539,7 +570,7 @@ test("runtime message handler forwards export progress events to the popup sessi
           detail: "대사와 주사위 내용을 읽는 중입니다.",
         });
         return {
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           filenameBase: "session-a",
           jsonByteLength: 19,
           lineCount: 1,
@@ -708,7 +739,7 @@ test("streamFirefoxDownloadDocument streams JSON chunks directly to the backgrou
     sentMessages.some(
       (message) =>
         message.type === FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE &&
-        String(message.chunkText || "").includes('"schemaVersion":1')
+        String(message.chunkText || "").includes('"version":1')
     )
   );
 });
@@ -812,7 +843,7 @@ test("runtime message handler can save large JSON through background download wi
       sentMessages.push({
         type: FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
         sessionId,
-        chunkText: '{"schemaVersion":1}',
+        chunkText: '{"version":1}',
       });
       onProgress?.({
         percent: 99,
@@ -858,7 +889,7 @@ test("runtime message handler can save large JSON through background download wi
     {
       type: FIREFOX_DOWNLOAD_STREAM_CHUNK_MESSAGE,
       sessionId: "export-session-direct",
-      chunkText: '{"schemaVersion":1}',
+      chunkText: '{"version":1}',
     },
     {
       type: FIREFOX_DOWNLOAD_STREAM_FINISH_MESSAGE,

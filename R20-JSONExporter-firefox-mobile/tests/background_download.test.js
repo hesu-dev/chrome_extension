@@ -49,7 +49,7 @@ test("downloadJsonPayload uses a blob URL and revokes it after download", async 
 
   const result = await downloadJsonPayload(
     {
-      jsonText: '{"schemaVersion":1}',
+      jsonText: '{"version":1}',
       filenameBase: "session-a",
     },
     {
@@ -387,7 +387,7 @@ test("background locks the active Roll20 tab, wakes ReadingLog, then requests js
         calls.push({ kind: "content", tabId, message });
         return {
           ok: true,
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           filenameBase: 'session-a',
           jsonByteLength: 19,
           lineCount: 1,
@@ -453,7 +453,7 @@ test("background locks the active Roll20 tab, wakes ReadingLog, then requests js
   assert.deepEqual(streamCall, {
     kind: "stream",
     payload: {
-      jsonText: '{"schemaVersion":1}',
+      jsonText: '{"version":1}',
       filenameBase: "session-a",
       lineCount: 1,
       jsonByteLength: 19,
@@ -531,7 +531,7 @@ test("background can wait for ReadingLog readiness without opening the app itsel
       query: async () => [{ id: 8 }],
       sendMessage: async () => ({
         ok: true,
-        jsonText: '{"schemaVersion":1}',
+        jsonText: '{"version":1}',
         filenameBase: 'session-b',
         jsonByteLength: 19,
         lineCount: 1,

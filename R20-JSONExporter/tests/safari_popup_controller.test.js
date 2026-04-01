@@ -88,7 +88,7 @@ test("popup controller measures and exports Roll20 JSON through the active tab",
           return {
             ok: true,
             filenameBase: "세션A",
-            jsonText: '{"schemaVersion":1,"lines":[]}',
+            jsonText: '{"version":1,"lines":[]}',
           };
         }
 
@@ -145,7 +145,7 @@ test("popup controller measures and exports Roll20 JSON through the active tab",
   assert.equal(doc.elements.statusMessage.textContent, "복사완료! 앱으로 돌아가주세요.");
   assert.equal(doc.elements.statusFilename.textContent, "세션A.json");
   assert.equal(doc.elements.statusMetrics.textContent, "메시지 12개");
-  assert.equal(doc.elements.statusPayload.textContent, "현재 파일 크기 30 B");
+  assert.equal(doc.elements.statusPayload.textContent, "현재 파일 크기 24 B");
   assert.equal(doc.elements.statusInbox.textContent, "");
   assert.equal(doc.elements.exportButton.disabled, false);
   assert.equal(doc.elements.exportButton.textContent, "리딩로그로 복사하기");
@@ -176,7 +176,7 @@ test("popup controller proceeds when ping has no response but measurement succee
           return {
             ok: true,
             filenameBase: "세션B",
-            jsonText: '{"schemaVersion":1,"lines":[{"speaker":"GM"}]}',
+            jsonText: '{"version":1,"lines":[{"speaker":"GM"}]}',
           };
         }
         throw new Error(`Unexpected message: ${payload.type}`);

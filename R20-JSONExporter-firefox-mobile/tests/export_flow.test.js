@@ -206,7 +206,7 @@ test("buildJsonShareFile creates an application/json file", () => {
 
   const file = buildJsonShareFile(
     {
-      jsonText: '{"schemaVersion":1}',
+      jsonText: '{"version":1}',
       filenameBase: "session:/z?*",
     },
     {
@@ -216,7 +216,7 @@ test("buildJsonShareFile creates an application/json file", () => {
 
   assert.equal(file.name, "session z.json");
   assert.equal(file.type, "application/json");
-  assert.deepEqual(file.parts, ['{"schemaVersion":1}']);
+  assert.deepEqual(file.parts, ['{"version":1}']);
 });
 
 test("buildSafeJsonFilename normalizes unsafe characters for file share", () => {
@@ -325,7 +325,7 @@ test("firefox mobile export can copy JSON to clipboard and open a text share mar
         query: async () => [{ id: 7 }],
         sendMessage: async () => ({
           ok: true,
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           filenameBase: "session-a",
           jsonByteLength: 19,
           lineCount: 1,
@@ -354,7 +354,7 @@ test("firefox mobile export can copy JSON to clipboard and open a text share mar
   });
 
   assert.equal(result.method, "clipboard-share-marker");
-  assert.deepEqual(clipboardWrites, ['{"schemaVersion":1}']);
+  assert.deepEqual(clipboardWrites, ['{"version":1}']);
   assert.deepEqual(sharePayloads, [
     {
       title: "ReadingLog 클립보드 가져오기",
@@ -373,7 +373,7 @@ test("firefox mobile export keeps clipboard copy even when text share is unavail
         query: async () => [{ id: 9 }],
         sendMessage: async () => ({
           ok: true,
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           filenameBase: "session-b",
           jsonByteLength: 19,
           lineCount: 1,
@@ -399,7 +399,7 @@ test("firefox mobile export keeps clipboard copy even when text share is unavail
   });
 
   assert.equal(result.method, "clipboard-copy");
-  assert.deepEqual(clipboardWrites, ['{"schemaVersion":1}']);
+  assert.deepEqual(clipboardWrites, ['{"version":1}']);
 });
 
 test("firefox mobile export can share small json text directly to ReadingLog", async () => {
@@ -412,7 +412,7 @@ test("firefox mobile export can share small json text directly to ReadingLog", a
         query: async () => [{ id: 17 }],
         sendMessage: async () => ({
           ok: true,
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           filenameBase: "session-direct",
           jsonByteLength: 19,
           lineCount: 1,
@@ -439,7 +439,7 @@ test("firefox mobile export can share small json text directly to ReadingLog", a
   assert.deepEqual(sharePayloads, [
     {
       title: "ReadingLog JSON 가져오기",
-      text: '{"schemaVersion":1}',
+      text: '{"version":1}',
     },
   ]);
 });
@@ -647,7 +647,7 @@ test("firefox mobile export surfaces download errors instead of copying text", a
             query: async () => [{ id: 9 }],
             sendMessage: async () => ({
               ok: true,
-              jsonText: '{"schemaVersion":1}',
+              jsonText: '{"version":1}',
               filenameBase: "session-b",
               jsonByteLength: 19,
               lineCount: 1,
@@ -691,7 +691,7 @@ test("firefox mobile share flow prefers file share before download", async () =>
         query: async () => [{ id: 21 }],
         sendMessage: async () => ({
           ok: true,
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           filenameBase: "session-share",
           jsonByteLength: 19,
           lineCount: 1,
@@ -731,7 +731,7 @@ test("firefox mobile share flow requires file share support", async () => {
             query: async () => [{ id: 22 }],
             sendMessage: async () => ({
               ok: true,
-              jsonText: '{"schemaVersion":1}',
+              jsonText: '{"version":1}',
               filenameBase: "session-share-fallback",
               jsonByteLength: 19,
               lineCount: 1,
@@ -772,7 +772,7 @@ test("firefox mobile share flow reports file-share stage failures clearly", asyn
             query: async () => [{ id: 31 }],
             sendMessage: async () => ({
               ok: true,
-              jsonText: '{"schemaVersion":1}',
+              jsonText: '{"version":1}',
               filenameBase: "session-share-error",
               jsonByteLength: 19,
               lineCount: 1,
@@ -808,7 +808,7 @@ test("firefox mobile localhost flow probes and posts json to ReadingLog", async 
         query: async () => [{ id: 41 }],
         sendMessage: async () => ({
           ok: true,
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           filenameBase: "session-localhost",
           jsonByteLength: 19,
           lineCount: 1,
@@ -846,7 +846,7 @@ test("firefox mobile localhost flow probes and posts json to ReadingLog", async 
   );
   assert.equal(
     JSON.parse(fetchCalls[1].options.body).jsonText,
-    '{"schemaVersion":1}'
+    '{"version":1}'
   );
 });
 
@@ -860,7 +860,7 @@ test("firefox mobile localhost flow reports probe failures clearly", async () =>
             query: async () => [{ id: 42 }],
             sendMessage: async () => ({
               ok: true,
-              jsonText: '{"schemaVersion":1}',
+              jsonText: '{"version":1}',
               filenameBase: "session-localhost-error",
               jsonByteLength: 19,
               lineCount: 1,
@@ -888,7 +888,7 @@ test("firefox mobile localhost flow reports post failures clearly", async () => 
             query: async () => [{ id: 43 }],
             sendMessage: async () => ({
               ok: true,
-              jsonText: '{"schemaVersion":1}',
+              jsonText: '{"version":1}',
               filenameBase: "session-localhost-post-error",
               jsonByteLength: 19,
               lineCount: 1,
@@ -925,7 +925,7 @@ test("firefox mobile deeplink localhost flow reports app-open failures clearly",
             query: async () => [{ id: 44 }],
             sendMessage: async () => ({
               ok: true,
-              jsonText: '{"schemaVersion":1}',
+              jsonText: '{"version":1}',
               filenameBase: "session-deeplink-error",
               jsonByteLength: 19,
               lineCount: 1,
@@ -999,7 +999,7 @@ test("firefox mobile streams localhost json through start chunk finish endpoints
   const requests = [];
   const progress = [];
   const largeJsonText = JSON.stringify({
-    schemaVersion: 1,
+    version: 1,
     lines: Array.from({ length: 4 }, (_, index) => ({
       id: `line-${index + 1}`,
       text: "x".repeat(40),
@@ -1066,7 +1066,7 @@ test("firefox mobile localhost stream surfaces chunk upload failures clearly", a
       streamReadingLogJsonToLocalhost(
         {
           filenameBase: "session-b",
-          jsonText: '{"schemaVersion":1}',
+          jsonText: '{"version":1}',
           lineCount: 1,
         },
         {

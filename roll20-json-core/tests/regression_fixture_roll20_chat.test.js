@@ -40,13 +40,16 @@ test("shared fixture preserves a stable cross-target chat json shape", () => {
     lines,
   });
 
-  assert.equal(doc.schemaVersion, 1);
+  assert.equal(doc.version, 1);
   assert.equal(Array.isArray(doc.lines), true);
-  assert.equal(doc.ebookView.titlePage.scenarioTitle, "fixture");
-  assert.equal(doc.ebookView.titlePage.ruleType, "COC");
+  assert.equal(doc.titlePage.scenarioTitle, "fixture");
+  assert.equal(doc.titlePage.ruleType, "COC");
   assert.equal(doc.lines[0].speaker, "KP");
-  assert.equal(doc.lines[0].input.speakerImages.avatar.url, "https://example.com/kp.png");
+  assert.equal(
+    doc.lines[0].input.portrait.images.avatar.originUrl,
+    "https://example.com/kp.png"
+  );
   assert.equal(doc.lines[1].role, "dice");
   assert.equal(doc.lines[1].input.dice.rule, "coc7");
-  assert.equal("v" in doc.lines[1].input.dice, false);
+  assert.equal(doc.lines[1].input.dice.v, 1);
 });

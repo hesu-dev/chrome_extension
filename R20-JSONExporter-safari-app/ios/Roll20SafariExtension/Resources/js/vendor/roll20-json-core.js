@@ -980,12 +980,19 @@ function formatTextColor(rawColor) {
   return colorValue;
 }
 
-function buildSpeakerImages(speakerImageUrl) {
+function buildPortraitPayload(speakerImageUrl) {
   const url = String(speakerImageUrl || "").trim();
-  if (!url) return undefined;
+  if (!url) {
+    return {
+      mode: "none",
+    };
+  }
   return {
-    avatar: {
-      url,
+    mode: "pair",
+    images: {
+      avatar: {
+        originUrl: url,
+      },
     },
   };
 }
@@ -1000,10 +1007,10 @@ function canonicalizeDiceTemplateName(template) {
 function canonicalizeDicePayload(dice) {
   if (!dice || typeof dice !== "object") return dice;
   const template = canonicalizeDiceTemplateName(dice.template);
-  if (!template || template === dice.template) return dice;
   return {
     ...dice,
-    template,
+    v: Number.isFinite(Number(dice.v)) ? Number(dice.v) : 1,
+    template: template || dice.template,
   };
 }
 
@@ -1028,22 +1035,6 @@ function omitNullishDeep(value) {
   return value;
 }
 
-function removeLegacyVersionFieldDeep(value) {
-  if (value == null) return value;
-  if (Array.isArray(value)) {
-    return value.map((item) => removeLegacyVersionFieldDeep(item));
-  }
-  if (typeof value === "object") {
-    const result = {};
-    Object.entries(value).forEach(([key, val]) => {
-      if (key === "v") return;
-      result[key] = removeLegacyVersionFieldDeep(val);
-    });
-    return result;
-  }
-  return value;
-}
-
 function inferRuleTypeFromLines(lines) {
   const list = Array.isArray(lines) ? lines : [];
   for (const line of list) {
@@ -1059,18 +1050,16 @@ function inferRuleTypeFromLines(lines) {
 
 function buildChatJsonDocument({ scenarioTitle = "", lines = [] } = {}) {
   return {
-    schemaVersion: 1,
-    ebookView: {
-      titlePage: {
-        scenarioTitle: String(scenarioTitle || ""),
-        ruleType: inferRuleTypeFromLines(lines),
-        gm: "",
-        pl: "",
-        writer: "",
-        copyright: "",
-        identifier: "",
-        extraMetaItems: [],
-      },
+    version: 1,
+    titlePage: {
+      scenarioTitle: String(scenarioTitle || ""),
+      ruleType: inferRuleTypeFromLines(lines),
+      gm: "",
+      pl: "",
+      writer: "",
+      copyright: "",
+      identifier: "",
+      extraMetaItems: [],
     },
     lines: Array.isArray(lines) ? lines : [],
   };
@@ -1098,10 +1087,9 @@ function buildChatJsonEntry({
   const normalizedText = String(text || "");
   const rawInput = {};
   if (imageUrl != null) rawInput.imageUrl = String(imageUrl);
-  const speakerImages = buildSpeakerImages(speakerImageUrl);
-  if (speakerImages) rawInput.speakerImages = speakerImages;
+  rawInput.portrait = buildPortraitPayload(speakerImageUrl);
   if (dice && typeof dice === "object") {
-    rawInput.dice = removeLegacyVersionFieldDeep(canonicalizeDicePayload(dice));
+    rawInput.dice = canonicalizeDicePayload(dice);
   }
   const input = omitNullishDeep(rawInput) || {};
   const entry = {
@@ -1481,7 +1469,7 @@ function buildExportDocument({ scenarioTitle = "", snapshots = [], compact = tru
     jsonText,
     jsonByteLength,
     lineCount: lines.length,
-    ruleType: String(documentPayload?.ebookView?.titlePage?.ruleType || ""),
+    ruleType: String(documentPayload?.titlePage?.ruleType || ""),
   };
 }
 

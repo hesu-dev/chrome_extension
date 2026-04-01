@@ -843,14 +843,24 @@
             const url = String(speakerImageUrl || "").trim();
             const input = {};
             if (imageUrl) input.imageUrl = imageUrl;
-            if (url) {
-              input.speakerImages = {
-                avatar: {
-                  url,
-                },
+            input.portrait = url
+              ? {
+                  mode: "pair",
+                  images: {
+                    avatar: {
+                      originUrl: url,
+                    },
+                  },
+                }
+              : {
+                  mode: "none",
+                };
+            if (dice && typeof dice === "object") {
+              input.dice = {
+                ...dice,
+                v: Number.isFinite(Number(dice.v)) ? Number(dice.v) : 1,
               };
             }
-            if (dice && typeof dice === "object") input.dice = dice;
             return {
               id: String(id || ""),
               speaker: String(speaker || ""),
@@ -869,18 +879,16 @@
       typeof buildChatJsonDocument === "function"
         ? buildChatJsonDocument
         : ({ scenarioTitle = "", lines = [] }) => ({
-            schemaVersion: 1,
-            ebookView: {
-              titlePage: {
-                scenarioTitle: String(scenarioTitle || ""),
-                ruleType: "",
-                gm: "",
-                pl: "",
-                writer: "",
-                copyright: "",
-                identifier: "",
-                extraMetaItems: [],
-              },
+            version: 1,
+            titlePage: {
+              scenarioTitle: String(scenarioTitle || ""),
+              ruleType: "",
+              gm: "",
+              pl: "",
+              writer: "",
+              copyright: "",
+              identifier: "",
+              extraMetaItems: [],
             },
             lines: Array.isArray(lines) ? lines : [],
           });

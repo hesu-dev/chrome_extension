@@ -39,13 +39,16 @@ test("buildExportDocument produces a stable ReadingLog document from normalized 
 
   assert.equal(result.lineCount, 2);
   assert.ok(result.jsonByteLength > 0);
-  assert.equal(result.documentPayload.schemaVersion, 1);
-  assert.equal(result.documentPayload.ebookView.titlePage.scenarioTitle, "세션A");
-  assert.equal(result.documentPayload.ebookView.titlePage.ruleType, "COC");
+  assert.equal(result.documentPayload.version, 1);
+  assert.equal(result.documentPayload.titlePage.scenarioTitle, "세션A");
+  assert.equal(result.documentPayload.titlePage.ruleType, "COC");
+  assert.equal(result.documentPayload.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    result.documentPayload.lines[0].input.speakerImages.avatar.url,
+    result.documentPayload.lines[0].input.portrait.images.avatar.originUrl,
     "https://cdn.example.com/avatar-final.png"
   );
+  assert.equal(result.documentPayload.lines[1].input.portrait.mode, "none");
+  assert.equal(result.documentPayload.lines[1].input.dice.v, 1);
   assert.equal(result.documentPayload.lines[1].input.dice.rule, "coc7");
   assert.equal(typeof result.jsonText, "string");
 });

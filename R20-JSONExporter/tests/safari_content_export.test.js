@@ -217,7 +217,7 @@ test("measureSafariExport reports current DOM counts and resolved filename", () 
   assert.ok(metrics.domNodeEstimate >= 8);
 });
 
-test("buildSafariExportPayload serializes the current DOM into schema v1 json", async () => {
+test("buildSafariExportPayload serializes the current DOM into ReadingLog external input json", async () => {
   const visibleMessage = createMessage({
     classNames: ["message"],
     speaker: " KP: ",
@@ -236,8 +236,8 @@ test("buildSafariExportPayload serializes the current DOM into schema v1 json", 
   const parsed = JSON.parse(payload.jsonText);
 
   assert.equal(payload.filenameBase, "세션A");
-  assert.equal(parsed.schemaVersion, 1);
-  assert.equal(parsed.ebookView.titlePage.scenarioTitle, "세션A");
+  assert.equal(parsed.version, 1);
+  assert.equal(parsed.titlePage.scenarioTitle, "세션A");
   assert.equal(parsed.lines.length, 1);
   assert.equal(parsed.lines[0].id, "msg-1");
   assert.equal(parsed.lines[0].speaker, "KP");
@@ -245,8 +245,9 @@ test("buildSafariExportPayload serializes the current DOM into schema v1 json", 
   assert.equal(parsed.lines[0].timestamp, "오후 8:15");
   assert.equal(parsed.lines[0].textColor, "#ff00aa");
   assert.equal(parsed.lines[0].text.trim(), "테스트 메시지");
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     "https://example.com/avatar.png"
   );
 });
@@ -276,8 +277,9 @@ test("buildSafariExportPayload inherits the previous speaker avatar url when the
   const payload = await buildSafariExportPayload({ doc });
   const parsed = JSON.parse(payload.jsonText);
 
+  assert.equal(parsed.lines[1].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[1].input.speakerImages.avatar.url,
+    parsed.lines[1].input.portrait.images.avatar.originUrl,
     "https://example.com/avatar.png"
   );
 });
@@ -308,7 +310,29 @@ test("buildSafariExportPayload clears the avatar url when the speaker changes an
   const parsed = JSON.parse(payload.jsonText);
 
   assert.equal(parsed.lines[1].speaker, "PL");
-  assert.equal(parsed.lines[1].input.speakerImages, undefined);
+  assert.equal(parsed.lines[1].input.portrait.mode, "none");
+  assert.equal(parsed.lines[1].input.portrait.images, undefined);
+});
+
+test("buildSafariExportPayload exports desc-styled messages with system role", async () => {
+  const doc = createDocument({
+    hrefs: ["https://app.roll20.net/campaigns/details/12345/%EC%84%B8%EC%85%98A"],
+    messages: [
+      createMessage({
+        classNames: ["message", "desc"],
+        speaker: " SYSTEM: ",
+        timestamp: "8:17 PM",
+        text: "차가운 공기가 스며든다.",
+        messageId: "msg-desc-1",
+      }),
+    ],
+  });
+
+  const payload = await buildSafariExportPayload({ doc });
+  const parsed = JSON.parse(payload.jsonText);
+
+  assert.equal(parsed.lines[0].role, "system");
+  assert.equal(parsed.lines[0].input.portrait.mode, "none");
 });
 
 test("buildSafariExportPayload applies shared avatar redirect mappings", async () => {
@@ -340,8 +364,9 @@ test("buildSafariExportPayload applies shared avatar redirect mappings", async (
   });
   const parsed = JSON.parse(payload.jsonText);
 
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     redirectedAvatarUrl
   );
 });
@@ -373,8 +398,9 @@ test("buildSafariExportPayload resolves shared avatar mappings through the page 
   });
   const parsed = JSON.parse(payload.jsonText);
 
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     redirectedAvatarUrl
   );
 });
@@ -531,7 +557,7 @@ test("runtime message handler returns measurement and export payloads", async ()
     },
     buildSafariExportPayload() {
       return {
-        jsonText: '{"schemaVersion":1}',
+        jsonText: '{"version":1}',
         filenameBase: "session-a",
       };
     },
@@ -571,7 +597,7 @@ test("runtime message handler returns measurement and export payloads", async ()
   });
   assert.deepEqual(exportResult, {
     ok: true,
-    jsonText: '{"schemaVersion":1}',
+    jsonText: '{"version":1}',
     filenameBase: "session-a",
   });
 });
@@ -608,12 +634,13 @@ test("browser runtime export uses the shared parser bundle contract", async () =
   });
   const parsed = JSON.parse(payload.jsonText);
 
-  assert.equal(parsed.schemaVersion, 1);
+  assert.equal(parsed.version, 1);
   assert.equal(parsed.lines[0].speaker, "KP");
   assert.equal(parsed.lines[0].timestamp, "오후 8:15");
   assert.equal(parsed.lines[0].safetext, "테스트 메시지");
+  assert.equal(parsed.lines[0].input.portrait.mode, "pair");
   assert.equal(
-    parsed.lines[0].input.speakerImages.avatar.url,
+    parsed.lines[0].input.portrait.images.avatar.originUrl,
     "https://example.com/avatar.png"
   );
 });

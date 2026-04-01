@@ -338,18 +338,16 @@
       return chatJsonApi.buildChatJsonDocument(payload);
     }
     return {
-      schemaVersion: 1,
-      ebookView: {
-        titlePage: {
-          scenarioTitle: String(payload?.scenarioTitle || ""),
-          ruleType: "",
-          gm: "",
-          pl: "",
-          writer: "",
-          copyright: "",
-          identifier: "",
-          extraMetaItems: [],
-        },
+      version: 1,
+      titlePage: {
+        scenarioTitle: String(payload?.scenarioTitle || ""),
+        ruleType: "",
+        gm: "",
+        pl: "",
+        writer: "",
+        copyright: "",
+        identifier: "",
+        extraMetaItems: [],
       },
       lines: Array.isArray(payload?.lines) ? payload.lines : [],
     };
