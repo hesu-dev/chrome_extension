@@ -18,6 +18,14 @@
     sharedCoreApi.chatJson ||
     (typeof window !== "undefined" ? window.Roll20CleanerChatJson || window.Roll20JsonCore?.chatJson : {}) ||
     {};
+  const parserUtilsApi =
+    sharedCoreApi.parserUtils ||
+    (typeof window !== "undefined" ? window.Roll20JsonCore?.parserUtils : {}) ||
+    {};
+  const cocRuleParserApi =
+    sharedCoreApi.cocRuleParser ||
+    (typeof window !== "undefined" ? window.Roll20JsonCore?.cocRuleParser : {}) ||
+    {};
   const avatarRedirectCache = new Map();
   let pageAvatarResolverReadyPromise = null;
   let pageAvatarResolveSequence = 0;
@@ -210,6 +218,32 @@
       return chatJsonApi.normalizeMessageText(raw);
     }
     return String(raw || "").replace(/\s+/g, " ").trim();
+  }
+
+  function parseDicePayload({ role, html }) {
+    const parsed =
+      typeof chatJsonApi.parseRoll20DicePayload === "function"
+        ? chatJsonApi.parseRoll20DicePayload({ role, html })
+        : null;
+    if (parsed) return parsed;
+
+    const template =
+      typeof parserUtilsApi.extractTemplateName === "function"
+        ? parserUtilsApi.extractTemplateName(html)
+        : "";
+    if (
+      String(role || "").toLowerCase() === "dice" &&
+      String(template || "").toLowerCase() === "coc-attack-bonus" &&
+      typeof cocRuleParserApi.parseCocRulePayload === "function"
+    ) {
+      return cocRuleParserApi.parseCocRulePayload({
+        role,
+        html,
+        template: "coc-attack-bonus-penalty",
+      });
+    }
+
+    return null;
   }
 
   function extractMessageText(messageEl) {
@@ -703,13 +737,10 @@
         imageUrl: getInlineMessageImageUrl(messageEl, doc),
         avatarOriginalUrl: currentSrc,
         avatarResolvedUrl: resolvedAvatarUrl,
-        dice:
-          typeof chatJsonApi.parseRoll20DicePayload === "function"
-            ? chatJsonApi.parseRoll20DicePayload({
-                role,
-                html: messageEl?.innerHTML || "",
-              })
-            : null,
+        dice: parseDicePayload({
+          role,
+          html: messageEl?.innerHTML || "",
+        }),
         hiddenPlaceholder: safeIsHiddenPlaceholder(messageEl?.textContent || ""),
         displayNone: false,
         hasDescStyle: hasDescStyle(messageEl),
@@ -780,13 +811,10 @@
       const effectiveTimestamp = String(resolvedContext.timestamp || "")
         .replace(/\s+/g, " ")
         .trim();
-      const dice =
-        typeof chatJsonApi.parseRoll20DicePayload === "function"
-          ? chatJsonApi.parseRoll20DicePayload({
-              role,
-              html: messageEl?.innerHTML || "",
-            })
-          : null;
+      const dice = parseDicePayload({
+        role,
+        html: messageEl?.innerHTML || "",
+      });
       const roleForEntry = dice ? "dice" : role;
       const messageId =
         messageEl?.getAttribute?.("data-messageid") ||
@@ -987,6 +1015,7 @@
     parseCampaignNameFromHref,
     extractCampaignNameFromHref,
     getDownloadNameBase,
+    parseDicePayload,
     measureSafariExport,
     collectAvatarCandidatesFromRoot,
     collectAvatarMappingsFromRoot,

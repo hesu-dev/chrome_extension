@@ -383,8 +383,9 @@
         });
       } finally {
         if (bindings.button) {
-          bindings.button.disabled = false;
-          bindings.button.textContent = "리딩로그로 복사하기";
+          const completed = state?.stage === "done";
+          bindings.button.disabled = completed;
+          bindings.button.textContent = completed ? "복사 완료" : "리딩로그로 복사하기";
         }
       }
     }

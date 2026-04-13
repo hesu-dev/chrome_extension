@@ -260,3 +260,33 @@ test('fallback coc-like text uses inputs.target', () => {
   assert.equal(parsed?.inputs?.result, '실패');
   assert.ok(!('success' in (parsed?.inputs || {})));
 });
+
+test('parseRoll20DicePayload normalizes coc attack bonus templates to coc-attack-bonus-penalty', () => {
+  const html = `
+    <div class="sheet-rolltemplate-coc-attack-bonus">
+      <table>
+        <caption>타신편</caption>
+        <tbody>
+          <tr>
+            <td class="sheet-template_label">기준치:</td>
+            <td class="sheet-template_value">55/27/11</td>
+          </tr>
+          <tr>
+            <td class="sheet-template_label">굴림:</td>
+            <td class="sheet-template_value">83, 56, 86</td>
+          </tr>
+          <tr>
+            <td class="sheet-template_label">피해:</td>
+            <td class="sheet-template_value">9</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const parsed = parseRoll20DicePayload({ role: 'dice', html });
+  assert.equal(parsed?.template, 'coc-attack-bonus-penalty');
+  assert.equal(parsed?.inputs?.target, 55);
+  assert.deepEqual(parsed?.inputs?.rolls, [83, 56, 86]);
+  assert.equal(parsed?.inputs?.damage, 9);
+});
